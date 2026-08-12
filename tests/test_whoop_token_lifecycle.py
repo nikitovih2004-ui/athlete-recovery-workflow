@@ -89,7 +89,11 @@ class WhoopTokenLifecycleTests(unittest.TestCase):
              patch.object(token_handoff, "HERE", self.target), \
              patch.object(whoop_auth, "TOKENS_FILE", str(target_tokens)), \
              patch.object(whoop_auth, "LOCK_FILE", str(target_tokens) + ".lock"):
-            installed = token_handoff.accept_uploaded_token(upload, service_user="unused")
+            service_user = "unused"
+            if os.name != "nt":
+                import pwd
+                service_user = pwd.getpwuid(os.getuid()).pw_name
+            installed = token_handoff.accept_uploaded_token(upload, service_user=service_user)
             self.assertTrue(installed["ok"])
             self.assertFalse(upload.exists())
             self.assertEqual(
