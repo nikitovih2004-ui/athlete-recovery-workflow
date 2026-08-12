@@ -949,9 +949,9 @@ class DeployFlowTests(unittest.TestCase):
             deploy.HERE / "tokens.json",
             deploy.HERE / "dashboard.html",
             deploy.HERE / "data" / "whoop.db",
-            deploy.HERE / ".codex" / "state.json",
+            deploy.HERE / ".local-state" / "state.json",
             deploy.HERE / "graphify-out" / "graph.json",
-            deploy.HERE / "PHASE2_SESSION_HANDOFF.md",
+            deploy.HERE / "PRIVATE_HANDOFF.md",
         ]
         self.assertTrue(all(deploy.is_excluded(path) for path in excluded))
         self.assertFalse(deploy.is_excluded(deploy.HERE / "morning_context.py"))

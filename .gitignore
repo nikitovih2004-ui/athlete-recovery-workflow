@@ -58,6 +58,10 @@ dashboard.html
 .agents/
 .mcp.json
 skills-lock.json
+.local-state/
+.agent-state/
+.tool-config.json
+workspace-lock.json
 *HANDOFF*.md
 .worktrees/
 

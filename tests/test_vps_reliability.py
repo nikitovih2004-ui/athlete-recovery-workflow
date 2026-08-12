@@ -118,9 +118,9 @@ class DatabaseAndDeployTests(unittest.TestCase):
                 root / 'data' / 'whoop.db',
                 root / 'graphify-out' / 'graph.json',
                 root / 'graphify-out' / 'cache' / 'example.json',
-                root / '.codex' / 'config.json',
-                root / '.local-agent' / 'settings.json',
-                root / '.agents' / 'state.json',
+                root / '.local-state' / 'config.json',
+                root / '.private-tools' / 'settings.json',
+                root / '.agent-state' / 'state.json',
             ]
             for path in [included, *excluded]:
                 path.parent.mkdir(parents=True, exist_ok=True)

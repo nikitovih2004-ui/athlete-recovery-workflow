@@ -37,11 +37,11 @@ SKIP_NAMES = {
     "tokens.json.refresh-ambiguous", "token_rotation_audit.jsonl",
     "oauth_alert_state.json", "oauth_runtime_state.json",
     "dashboard.html", "deploy.py", "temp_cron.txt",
-    "AGENTS.md", ".mcp.json", "EXAMPLE.mp4",
-    "PHASE2_SESSION_HANDOFF.md",
+    "AGENTS.md", ".mcp.json", "WORKSPACE_NOTES.md", ".tool-config.json", "EXAMPLE.mp4",
+    "PHASE2_SESSION_HANDOFF.md", "PRIVATE_HANDOFF.md",
 }
 SKIP_DIRS = {
-    ".git", ".codex", ".agents", ".local-agent", ".github", "venv", ".venv",
+    ".git", ".codex", ".agents", ".local-agent", ".local-state", ".agent-state", ".private-tools", ".github", "venv", ".venv",
     "__pycache__", "data", "backups", "design-reference", "tests", "New folder", "graphify-out",
 }
 SKIP_SUFFIXES = {".pyc", ".pyo", ".log", ".db", ".sqlite", ".sqlite3", ".cmd", ".ps1", ".vbs", ".mp4"}

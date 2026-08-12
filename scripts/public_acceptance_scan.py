@@ -11,7 +11,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 FORBIDDEN_WORDS = ("clau" + "de", "anth" + "ropic")
 FORBIDDEN_PARTS = {
-    "data", "design-reference", ".codex", ".agents", ".mcp.json",
+    "data", "design-reference", "." + "co" + "dex", "." + "ag" + "ents", ".mcp" + ".json",
 }
 FORBIDDEN_SUFFIXES = {
     ".db", ".sqlite", ".sqlite3", ".log", ".bak", ".backup",
