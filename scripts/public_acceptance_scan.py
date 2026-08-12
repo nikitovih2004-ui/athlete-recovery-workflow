@@ -19,7 +19,7 @@ FORBIDDEN_SUFFIXES = {
     ".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".mov",
 }
 SECRET_PATTERNS = {
-    "private-key": re.compile(r"-----BEGIN (?:RSA |OPENSSH |EC |DSA )?PRIVATE KEY-----"),
+    "private-key": re.compile("-----BEGIN " + "(?:RSA |OPENSSH |EC |DSA )?" + "PRIVATE KEY-----"),
     "telegram-token": re.compile(r"\b\d{6,12}:[A-Za-z0-9_-]{24,}\b"),
     "google-api-key": re.compile(r"\bAIza[0-9A-Za-z_-]{30,}\b"),
     "github-token": re.compile(r"\b(?:ghp|github_pat)_[A-Za-z0-9_]{20,}\b"),
