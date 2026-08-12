@@ -1,0 +1,3389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <link rel="icon" href="data:,">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WHOOP · Physiological State</title>
+<style>
+/* Local system font stack keeps the dashboard deterministic and network-free. */
+/* ============================================================================
+   Тема «Obsidian Performance / Vitality» — точный перенос дизайн-системы из
+   Google Stitch (см. design-reference/code.html). Глубокий чёрный фон (#050608),
+   стеклянные панели (glassmorphism: blur 20px, 1px inner-glow border, tonal-градиент),
+   шрифт Bahnschrift с табличными цифрами. Семантика цвета из системы:
+     оранжевый (#FF4D00)  = strain / активность
+     лаймовый (#C6FF00)   = recovery / готовность
+     голубой  (#00E5FF)   = сон / циркадные ритмы
+     фиолетовый (#B388FF) = глубокий сон
+   Зоны recovery — традиционный светофор для мгновенного считывания зоны:
+     лайм ≥67 / янтарь 34–66 / красный <34 (--good/--warn/--crit).
+   Радиусы: панели 1rem (16px), крупные контейнеры 1.5rem; тени заменены на
+   tonal layering + мягкое цветное свечение акцентов (box-shadow inset + glow). */
+:root{
+  --bg:#050608; --surface:#131417; --surface-2:#1A1C20; --surface-3:#282A2C;
+  --ink:#F4F4F5; --ink-2:#A1A1AA; --muted:#A1A1AA;
+  /* #82828C вместо прежнего #52525B: тот же приглушённый серый, но контраст на
+     стекле ≥4.5:1 (WCAG AA) — токен используется для мелких подписей 10–12px */
+  --slate:#82828C;
+  --border:rgba(255,255,255,.06); --border-strong:rgba(255,255,255,.10);
+  --grid:rgba(255,255,255,.05); --axis:rgba(255,255,255,.12);
+  --accent:#FF4D00;            /* strain / активность (orange) */
+  --accent-2:#00E5FF;          /* сон (blue) */
+  --accent-3:#B388FF;          /* глубокий сон (purple) */
+  --accent-lime:#C6FF00;       /* recovery / готовность */
+  --accent-soft:rgba(255,77,0,.14);
+  --trend-line:#8A8FA3;        /* холодная пунктирная линия тренда (отличается от данных) */
+  --good:#C6FF00; --warn:#FFC24B; --crit:#FF5C5C;
+  --mist:rgba(255,255,255,.09);        /* нейтральная заливка (heatmap «нет данных», треки шкал) */
+  /* стадии сна (таймлайн + легенда); deep/rem совпадают с системными акцентами */
+  --sleep-awake:#52525B; --sleep-core:rgba(0,229,255,.42);
+  --sleep-deep:#B388FF; --sleep-rem:#00E5FF;
+  /* хвост категориальной палитры видов активности (5–8-й цвета после 4 акцентов) */
+  --cat-5:#FF8A4C; --cat-6:#E4E4E7; --cat-7:#7BE3F0; --cat-8:#D0B8FF;
+  /* единый рецепт «стекла»: фон/hover-фон/тень всех панелей задаются здесь */
+  --glass-grad:linear-gradient(180deg,rgba(19,20,23,.80) 0%,rgba(19,20,23,.42) 100%);
+  --glass-grad-hover:linear-gradient(180deg,rgba(26,28,32,.80) 0%,rgba(20,22,26,.42) 100%);
+  --glass-shadow:inset 0 1px 0 0 rgba(255,255,255,.02),0 10px 30px -10px rgba(0,0,0,.5);
+  --font-body:'Bahnschrift','Segoe UI Variable','Segoe UI',ui-sans-serif,system-ui,sans-serif;
+  --font-data:var(--font-body);
+  --font-display:var(--font-body);
+  /* типографическая шкала — размер/насыщенность/интерлиньяж/трекинг для всего dashboard.
+     Правки иерархии текста делаются только здесь (Typography pass), не в отдельных правилах. */
+  --fs-2xs:9px; --fs-xs:10px; --fs-sm:11px; --fs-sm2:12px; --fs-base:13px;
+  --fs-md:14px; --fs-md2:15px; --fs-lg:16px; --fs-xl:18px; --fs-2xl:20px;
+  --fs-3xl:22px; --fs-4xl:24px; --fs-5xl:32px;
+  --fs-tile-value:clamp(31px,3vw,42px);
+  --fs-tile-value-mobile:30px;
+  --fs-hero-h1:clamp(38px,5vw,62px);
+  --fs-hero-h1-mobile:42px;
+  --fs-panel-h1:clamp(32px,4vw,48px);
+  --fs-hero-score:74px;
+  --fs-hero-score-mobile:62px;
+  --fw-light:300; --fw-regular:400; --fw-medium:500; --fw-semibold:600;
+  --lh-tight:1; --lh-snug:1.15; --lh-normal:1.25; --lh-relaxed:1.55;
+  --ls-tightest:-.055em; --ls-tighter:-.04em; --ls-tight:-.02em; --ls-snug:-.01em;
+  --ls-wide:.05em; --ls-wider:.1em; --ls-widest:.15em;
+  --card-padding:28px; --element-gap:16px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:var(--font-body);line-height:1.5;font-variant-numeric:tabular-nums;
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;position:relative;}
+/* фоновый слой: тёмный фон дашборда (var(--bg)) + анимированные лучи поверх него.
+   position:fixed + inset:0 = во весь viewport, независимо от высоты/скролла страницы;
+   z-index:0 держит его под .shell (z-index:10). overflow:hidden только обрезает
+   собственное содержимое узла (canvas точно того же размера — обрезать нечего),
+   на позиционирование потомков как fixed/absolute это не влияет, т.к. ни у body,
+   ни у .bg-layers нет transform/filter/perspective, которые создали бы новый
+   containing block и «сломали» бы position:fixed внутри. */
+.bg-layers{position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:0;pointer-events:none;overflow:hidden;}
+.bg-layers .beams{position:absolute;inset:0;width:100%;height:100%;display:block;filter:blur(18px);}
+/* стеклянная панель — базовый приём глубины всей системы (glassmorphism).
+   Один рецепт на все панели: карточки, плитки, инсайты. Правки стекла — только здесь. */
+.glass,.card,.tile{background:var(--glass-grad);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border:1px solid var(--border);
+  box-shadow:var(--glass-shadow);}
+.shell{position:relative;z-index:10;max-width:1440px;margin:0 auto;background:transparent;}
+.wrap{max-width:1440px;margin:0 auto;padding:28px 32px 96px;}
+@media(max-width:640px){.wrap{padding:20px 16px 72px;}}
+.sub{color:var(--muted);font-size:var(--fs-base);margin-top:2px;}
+/* ===== Overview hero: крупный светлый заголовок + чип готовности ===== */
+.ov-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin:4px 0 34px;}
+.ov-hero h1{font-size:var(--fs-panel-h1);font-weight:var(--fw-light);letter-spacing:var(--ls-tighter);line-height:var(--lh-tight);margin:0 0 10px;
+  background:linear-gradient(to right,#fff,var(--ink-2));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+.ov-hero p{color:var(--ink-2);font-size:var(--fs-md2);font-weight:var(--fw-light);line-height:var(--lh-relaxed);margin:0;max-width:54ch;}
+.ov-hero p b{color:var(--ink);font-weight:var(--fw-medium);}
+.readiness{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);
+  border-radius:9999px;padding:9px 16px;flex:0 0 auto;white-space:nowrap;}
+.readiness .dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;box-shadow:0 0 14px 0 currentColor;}
+.readiness .lbl{font-size:var(--fs-sm2);font-weight:var(--fw-medium);color:var(--ink-2);}
+@media(max-width:720px){.ov-hero{flex-direction:column;align-items:flex-start;gap:18px;}}
+/* ===== метрик-плитки: 6 стеклянных Data Tiles ===== */
+.tiles{display:grid;grid-template-columns:repeat(6,1fr);gap:var(--element-gap);margin-top:0;}
+@media(max-width:1000px){.tiles{grid-template-columns:repeat(3,1fr);}}
+@media(max-width:560px){.tiles{grid-template-columns:repeat(2,1fr);}}
+/* ===== bento-сетка главной визуализации ===== */
+.bento{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--element-gap);margin-top:var(--element-gap);align-items:stretch;}
+.bento>.card{margin-top:0;}
+.bento .bento-2{grid-column:span 2;}
+.bento .bento-3{grid-column:1 / -1;}
+@media(max-width:900px){.bento{grid-template-columns:1fr;}.bento .bento-2,.bento .bento-3{grid-column:1 / -1;}}
+/* ряд «Биометрические тренды» — стопка спарклайнов (RHR, сон, …) как в макете */
+.trend-rows{display:flex;flex-direction:column;gap:26px;margin-top:8px;}
+.trend-row{position:relative;cursor:pointer;}
+.trend-row .trh{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:12px;}
+.trend-row .trv{font-size:var(--fs-2xl);font-weight:var(--fw-light);line-height:var(--lh-tight);letter-spacing:var(--ls-tight);}
+.trend-row .trv small{font-size:var(--fs-xs);color:var(--slate);text-transform:uppercase;margin-left:5px;letter-spacing:var(--ls-wide);}
+.trend-plot{position:relative;height:60px;width:100%;}
+.trend-plot .grid3{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:space-between;opacity:.6;pointer-events:none;}
+.trend-plot .grid3 i{display:block;width:100%;height:1px;background:var(--grid);}
+.trend-plot svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;}
+.trend-row .expand-hint{top:-2px;right:0;}
+/* 4. SPARKLINE-МИНИ и мини-карточки (дополнительный ряд метрик) */
+.spark-mini{color:var(--ink);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:4px;flex:1;min-width:0;}
+/* микро-лейбл (10px/600/uppercase/tracking) — единый паттерн подписей-категорий */
+.microlabel,.spark-mini .k,.mini-card .k,.tile .k,.sheet-stats .k{
+  font-size:var(--fs-xs);font-weight:var(--fw-semibold);letter-spacing:var(--ls-wider);text-transform:uppercase;color:var(--muted);}
+.spark-mini .v{font-family:var(--font-data);font-size:var(--fs-4xl);font-weight:var(--fw-regular);line-height:var(--lh-tight);letter-spacing:var(--ls-tight);color:var(--ink);}
+.spark-mini .v small{font-size:var(--fs-sm2);font-weight:var(--fw-medium);color:var(--slate);margin-left:3px;}
+.spark-mini .sp{margin-top:6px;}
+.spark-mini .sp svg{display:block;width:100%;height:34px;}
+.mini-card{display:flex;flex-direction:column;gap:8px;justify-content:space-between;}
+.mini-card .v{font-family:var(--font-data);font-size:var(--fs-4xl);font-weight:var(--fw-regular);line-height:var(--lh-tight);letter-spacing:var(--ls-tighter);color:var(--ink-2);}
+.mini-card .v small{font-size:var(--fs-sm2);font-weight:var(--fw-medium);color:var(--slate);margin-left:4px;}
+.mini-card .trend{font-size:var(--fs-sm);font-weight:var(--fw-medium);}
+.mini-card .trend .base{color:var(--slate);font-weight:var(--fw-regular);font-size:var(--fs-xs);}
+.mini-card .sp{margin-top:6px;}
+.mini-card .sp svg{display:block;width:100%;height:44px;}
+/* 1. КРУГОВОЙ ДАТЧИК Recovery — крупное радиальное кольцо со свечением и анимацией */
+.gauge-card{display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;position:relative;min-height:330px;overflow:hidden;}
+.gauge-card .card-head{position:relative;z-index:2;}
+.gauge-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;width:100%;position:relative;padding:6px 0 4px;}
+.gauge-wrap svg{width:100%;max-width:240px;height:auto;overflow:visible;position:relative;z-index:1;}
+/* мягкое пульсирующее свечение под датчиком (цвет = зона recovery) */
+.gauge-glow{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:170px;height:170px;border-radius:50%;filter:blur(44px);opacity:.24;pointer-events:none;z-index:0;
+  animation:gaugePulse 4.2s ease-in-out infinite;}
+@keyframes gaugePulse{0%,100%{opacity:.18;transform:translate(-50%,-50%) scale(.94);}
+  50%{opacity:.32;transform:translate(-50%,-50%) scale(1.06);}}
+/* плавная развёртка дуги прогресса от 0 к значению */
+.gauge-ring{transition:stroke-dashoffset 1.15s cubic-bezier(.22,.9,.3,1);}
+.gauge-tip{transition:opacity .5s ease .7s;}
+.gauge-cap{margin-top:2px;font-size:var(--fs-sm);color:var(--slate);text-align:center;position:relative;z-index:2;}
+/* 2. ТАЙМЛАЙН СНА — сегментированная капсула стадий */
+.sleep-times{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px;padding:0 2px;}
+.sleep-times .t{font-family:var(--font-data);font-size:var(--fs-4xl);font-weight:var(--fw-light);color:var(--ink);letter-spacing:var(--ls-tight);}
+.sleep-times .t small{display:block;font-size:var(--fs-2xs);font-weight:var(--fw-semibold);color:var(--muted);text-transform:uppercase;letter-spacing:var(--ls-wider);margin-top:6px;font-family:var(--font-body);}
+.sleep-bar{display:flex;width:100%;height:26px;gap:2px;background:var(--surface-2);border-radius:8px;padding:2px;}
+.sleep-bar .sseg{height:100%;border-radius:4px;min-width:2px;transition:filter .15s;cursor:pointer;}
+.sleep-bar .sseg:hover{filter:brightness(1.18);}
+.sleep-legend{display:flex;flex-wrap:wrap;gap:10px 24px;margin-top:22px;padding-top:22px;border-top:1px solid var(--border);}
+.sleep-legend .it{display:flex;align-items:baseline;gap:8px;font-size:var(--fs-base);}
+.sleep-legend .sw{width:8px;height:8px;border-radius:50%;flex:0 0 auto;transform:translateY(1px);}
+.sleep-legend .nm{color:var(--ink-2);}
+.sleep-legend .vl{font-family:var(--font-data);font-weight:var(--fw-medium);color:var(--ink);}
+/* мобильный breakpoint: график истории сна (#c_sleep_hist) — SVG с фиксированным
+   viewBox, ширина зависит от числа ночей в данных. Глобальное svg{max-width:100%}
+   сжимает весь SVG (включая текст осей) под узкий контейнер — на 375px подписи
+   становятся ~5px и нечитаемы. Ниже снимаем сжатие только для этого графика,
+   .chart уже даёт overflow-x:auto — график остаётся читаемым и скроллится
+   горизонтально вместо того чтобы схлопываться. viewBox/координаты не трогаем. */
+@media(max-width:640px){
+  /* .bento-3 применяется только к карточке "Архитектура сна" (единственное
+     использование класса) — без этого grid-контейнер вычисляет минимальную
+     ширину колонки по min-content ребёнка (840px SVG) и раздувает всю карту
+     до 884px вместо того чтобы дать .chart{overflow-x:auto} обрезать/скроллить. */
+  .card.bento-3{min-width:0;}
+  #c_sleep_hist svg{max-width:none;}
+}
+/* Data Dashboard Card — стеклянная панель (стекло наследуется от общего рецепта), радиус 16px */
+.card{border-radius:1rem;padding:var(--card-padding);margin-top:var(--element-gap);
+  transition:border-color .3s ease,background .3s ease,transform .3s cubic-bezier(.34,1.4,.5,1);}
+.card:hover{border-color:var(--border-strong);background:var(--glass-grad-hover);}
+.card h2{font-family:var(--font-display);font-size:var(--fs-xl);font-weight:var(--fw-medium);letter-spacing:var(--ls-snug);
+  color:var(--ink);margin:0 0 6px;text-transform:none;line-height:var(--lh-normal);}
+.card .desc{color:var(--ink-2);font-size:var(--fs-base);margin:0 0 18px;max-width:74ch;line-height:var(--lh-relaxed);}
+/* stat tiles — стеклянные Data Tiles 4:3, метка сверху, значение снизу */
+.tile{position:relative;overflow:hidden;color:var(--ink);--tile-value:var(--ink);--tile-line:rgba(255,255,255,.34);
+  border-radius:1rem;padding:22px 22px;
+  display:flex;flex-direction:column;justify-content:space-between;aspect-ratio:4 / 3;
+  transition:border-color .3s ease,transform .3s cubic-bezier(.34,1.4,.5,1);}
+.tile.expandable:hover{border-color:var(--border-strong);transform:translateY(-2px);}
+.tile .body{margin-top:auto;}
+.tile .v{font-family:var(--font-data);font-size:var(--fs-tile-value);font-weight:var(--fw-regular);letter-spacing:var(--ls-tighter);
+  line-height:var(--lh-tight);color:var(--tile-value);transition:transform .25s ease;}
+.tile .v small{font-size:var(--fs-2xl);font-weight:var(--fw-regular);color:var(--slate);letter-spacing:var(--ls-tight);}
+.tile .u{font-size:var(--fs-xs);color:var(--slate);margin-top:6px;text-transform:uppercase;letter-spacing:var(--ls-wide);}
+.tile.metric-hrv{--tile-value:var(--accent-lime);--tile-line:rgba(198,255,0,.56);}
+.tile.metric-rhr{--tile-value:var(--ink);--tile-line:rgba(255,255,255,.34);}
+.tile.metric-sleep{--tile-value:var(--accent-2);--tile-line:rgba(0,229,255,.52);}
+.tile.metric-sleep-performance{--tile-value:rgba(0,229,255,.82);--tile-line:rgba(0,229,255,.34);}
+.tile.metric-load{--tile-value:var(--accent);--tile-line:rgba(255,77,0,.56);}
+.tile.metric-recovery{--tile-value:var(--accent-lime);--tile-line:rgba(198,255,0,.42);}
+.tile.metric-hrv::before,.tile.metric-sleep::before,.tile.metric-sleep-performance::before,
+.tile.metric-load::before,.tile.metric-recovery::before{content:"";position:absolute;top:-32px;right:-32px;
+  width:96px;height:96px;filter:blur(32px);border-radius:9999px;opacity:.08;}
+.tile.metric-hrv::before,.tile.metric-recovery::before{background:var(--accent-lime);}
+.tile.metric-sleep::before,.tile.metric-sleep-performance::before{background:var(--accent-2);}
+.tile.metric-load::before{background:var(--accent);}
+.tile.metric-sleep-performance::before,.tile.metric-recovery::before{opacity:.055;}
+.tile .zonebars{display:flex;gap:6px;margin-top:10px;}
+.tile .zonebars i{display:block;height:3px;border-radius:9999px;}
+/* insights (Факторы) — evidence-карточки в card-языке Фазы 6; сама сетка и
+   карточки стилизуются в 30-products.css (.factor-evidence-grid), легаси
+   .ins с цветным левым бортом удалён вместе со старым рендером. */
+.insights{display:grid;gap:var(--element-gap);margin-top:var(--element-gap);}
+.insights b{color:var(--ink);font-weight:var(--fw-semibold);}
+/* встроенная аннотация-вывод из данных: тихий editorial-комментарий под графиком,
+   hairline-линейка слева, без плашек — в тоне .desc, но с акцентом на цифры */
+.data-note{font-size:var(--fs-sm2);line-height:var(--lh-relaxed);color:var(--ink-2);margin:14px 0 0;
+  padding-left:12px;border-left:2px solid var(--border-strong);max-width:80ch;}
+.data-note b{color:var(--ink);font-weight:var(--fw-semibold);}
+/* chart */
+.chart{width:100%;overflow-x:auto;}
+svg{display:block;max-width:100%;font-family:inherit;}
+.axlbl{fill:var(--muted);font-size:11px;}
+.axlbl.tab{font-variant-numeric:tabular-nums;}
+.grid-line{stroke:var(--grid);stroke-width:1;}
+.baseline{stroke:var(--axis);stroke-width:1;}
+.legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:12px;font-size:var(--fs-base);color:var(--ink-2);align-items:center;}
+.legend .it{display:inline-flex;align-items:center;gap:7px;}
+.sw{width:12px;height:12px;border-radius:3px;flex:0 0 auto;}
+.sw.line{height:3px;border-radius:2px;width:16px;}
+/* table — тёмная, hairline-разделители, без заливок */
+table{width:100%;border-collapse:collapse;font-size:var(--fs-md);}
+th,td{text-align:right;padding:12px 10px;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums;font-family:var(--font-data);color:var(--ink-2);}
+td b{color:var(--ink);}
+th:first-child,td:first-child{text-align:left;font-variant-numeric:normal;font-family:var(--font-body);color:var(--ink);}
+thead th{color:var(--slate);font-size:var(--fs-xs);font-weight:var(--fw-semibold);letter-spacing:var(--ls-wider);text-transform:uppercase;font-family:var(--font-body);}
+tbody tr:hover{background:rgba(255,255,255,.03);}
+.pill{display:inline-block;padding:2px 10px;border-radius:20px;font-size:var(--fs-sm2);font-weight:var(--fw-medium);font-family:var(--font-data);
+  border:1px solid currentColor;}
+.pill.green{color:var(--good);}
+.pill.yellow{color:var(--warn);}
+.pill.red{color:var(--crit);}
+/* two-col */
+.cols2{display:grid;grid-template-columns:1fr 1fr;gap:var(--element-gap);}
+@media(max-width:820px){.cols2{grid-template-columns:1fr;}}
+.small-mult{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;}
+/* tooltip — white card, hairline border, no shadow.
+   z-index выше, чем у .sheet-backdrop (100), иначе тултип рендерится под модальным
+   окном развёрнутого графика и его не видно при наведении внутри оверлея. */
+#tt{position:fixed;pointer-events:none;z-index:300;background:var(--surface-2);color:var(--ink);
+  border:1px solid var(--border-strong);border-radius:10px;padding:9px 12px;
+  font-size:var(--fs-sm2);opacity:0;transition:opacity .08s;max-width:240px;
+  box-shadow:0 12px 30px -8px rgba(0,0,0,.7);}
+#tt .tth{font-family:var(--font-display);font-weight:var(--fw-medium);letter-spacing:var(--ls-snug);margin-bottom:3px;color:var(--ink);}
+#tt .ttr{color:var(--ink-2);font-variant-numeric:tabular-nums;font-family:var(--font-data);}
+#tt .ttr b{color:var(--ink);}
+/* ===== раскрытие sparkline-карточки в детальный оверлей ===== */
+.expandable{cursor:pointer;}
+.spark-mini.expandable{transition:background .18s,border-color .18s,transform .25s cubic-bezier(.34,1.4,.5,1);}
+.spark-mini.expandable:hover{background:rgba(255,255,255,.03);transform:translateY(-2px);}
+.spark-mini.expandable:focus-visible,.card.expandable:focus-visible,.trend-row:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:10px;}
+.tile.expandable:focus-visible{outline:2px solid var(--accent);outline-offset:-3px;}
+.expand-hint{position:absolute;top:12px;right:14px;color:var(--slate);opacity:.25;transition:opacity .18s;pointer-events:none;}
+.mini-card{position:relative;}
+.spark-mini{position:relative;}
+.expandable:hover .expand-hint,.expandable:focus-visible .expand-hint,.trend-row:hover .expand-hint,.trend-row:focus-visible .expand-hint{opacity:1;}
+.sheet-backdrop{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;
+  padding:20px;background:rgba(0,0,0,.62);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);}
+.sheet{background:linear-gradient(180deg,rgba(24,26,30,.96) 0%,rgba(16,17,20,.96) 100%);
+  border:1px solid var(--border-strong);border-radius:1.25rem;
+  width:min(720px,94vw);max-height:86vh;overflow:auto;padding:30px;position:relative;will-change:transform;
+  box-shadow:0 30px 80px -20px rgba(0,0,0,.8);}
+.sheet-x{position:absolute;top:16px;right:16px;width:44px;height:44px;min-width:44px;min-height:44px;border:1px solid var(--border);
+  background:var(--surface-2);border-radius:9999px;cursor:pointer;font-size:var(--fs-md2);color:var(--ink-2);font-family:var(--font-body);
+  display:flex;align-items:center;justify-content:center;line-height:var(--lh-tight);transition:background .15s,color .15s;}
+.sheet-x:hover{background:var(--surface-3);color:var(--ink);}
+.sheet-x:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+.sheet-head h3{font-family:var(--font-display);font-weight:var(--fw-medium);letter-spacing:var(--ls-snug);font-size:var(--fs-4xl);
+  margin:0 44px 0 0;color:var(--ink);line-height:var(--lh-snug);}
+.sheet-head h3 span{color:var(--slate);font-size:var(--fs-md2);font-weight:var(--fw-regular);}
+.sheet-stats{display:flex;gap:40px;margin:20px 0 6px;flex-wrap:wrap;padding-bottom:18px;border-bottom:1px solid var(--border);}
+.sheet-stats .st{display:flex;flex-direction:column;gap:4px;}
+.sheet-stats .v{font-family:var(--font-data);font-size:var(--fs-4xl);font-weight:var(--fw-regular);color:var(--ink);letter-spacing:var(--ls-tight);}
+.sheet-chart{margin-top:16px;}
+.sheet-chart svg{width:100%;height:auto;}
+/* текстовый отчёт в detail sheet: читабельная мера, прокрутка отдаётся .sheet */
+.sheet-chart .ls-sheet{max-width:66ch;}
+.hoverable{cursor:pointer;}
+/* lifestyle insights (rendered markdown) */
+.ls-md{font-size:var(--fs-md2);color:var(--ink-2);}
+.ls-md h3{font-family:var(--font-display);font-size:var(--fs-3xl);font-weight:var(--fw-regular);color:var(--ink);letter-spacing:var(--ls-tight);margin:22px 0 8px;text-transform:none;}
+.ls-md h4{font-family:var(--font-display);font-size:var(--fs-xl);font-weight:var(--fw-regular);color:var(--ink);letter-spacing:var(--ls-tight);margin:16px 0 6px;text-transform:none;}
+.ls-md h3:first-child,.ls-md h4:first-child{margin-top:2px;}
+.ls-md p{margin:0 0 10px;max-width:78ch;}
+.ls-md ul,.ls-md ol{margin:0 0 12px;padding-left:22px;max-width:78ch;}
+.ls-md li{margin:3px 0;}
+.ls-md b{color:var(--ink);}
+.ls-md code{background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-size:var(--fs-sm2);}
+.ls-md hr{border:0;border-top:1px solid var(--border);margin:16px 0;}
+.ls-md a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--accent);text-underline-offset:3px;}
+
+/* Accordion details/summary styles */
+.ls-md details {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 12px;
+  overflow: hidden;
+  transition: border-color 0.25s, box-shadow 0.25s, transform 0.2s;
+}
+.ls-md details:hover {
+  border-color: var(--slate);
+  box-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.4);
+  transform: translateY(-1px);
+}
+.ls-md details[open] {
+  border-color: var(--accent);
+  box-shadow: 0 4px 20px -4px rgba(255, 77, 0, 0.15);
+}
+.ls-md summary {
+  padding: 16px 20px;
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: background 0.2s;
+}
+.ls-md summary::-webkit-details-marker {
+  display: none;
+}
+.ls-md summary:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+.ls-md summary::after {
+  content: "→";
+  font-family: var(--font-body);
+  font-weight: var(--fw-light);
+  color: var(--muted);
+  font-size: var(--fs-xl);
+  transition: transform 0.25s ease, color 0.25s ease;
+}
+.ls-md details[open] summary::after {
+  transform: rotate(90deg);
+  color: var(--accent);
+}
+.ls-md .details-content {
+  padding: 20px;
+  border-top: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.12);
+}
+.ls-md pre {
+  margin: 10px 0;
+  padding: 12px;
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow-x: auto;
+}
+.ls-md pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-size: var(--fs-sm2);
+  color: var(--ink-2);
+}
+.ls-empty{font-size:var(--fs-md2);color:var(--ink-2);margin:6px 0 0;max-width:78ch;}
+.warn-list{list-style:none;padding:0;margin:10px 0 0;}
+.warn-list li{display:flex;gap:14px;align-items:baseline;padding:12px 4px;margin:0;
+  border:0;border-bottom:1px solid var(--border);font-size:var(--fs-md);}
+.warn-list li:last-child{border-bottom:0;}
+.warn-list .d{font-weight:var(--fw-semibold);font-variant-numeric:tabular-nums;font-family:var(--font-data);flex:0 0 auto;min-width:66px;}
+.warn-list .m{color:var(--ink-2);}
+.foot{color:var(--slate);font-size:var(--fs-sm2);margin-top:60px;text-align:center;font-family:var(--font-display);letter-spacing:var(--ls-tight);}
+.tag{display:inline-block;font-family:var(--font-body);font-size:var(--fs-xs);font-weight:var(--fw-medium);color:var(--accent-2);background:transparent;
+  border:1px solid var(--border);border-radius:9999px;padding:3px 11px;margin-left:6px;vertical-align:middle;}
+/* ===== navbar: glassmorphism шапка в общем тоне с дашбордом ===== */
+.navbar{position:sticky;top:0;z-index:40;
+  background:linear-gradient(180deg,rgba(19,20,23,.88) 0%,rgba(13,14,17,.72) 100%);
+  backdrop-filter:blur(24px) saturate(1.4);-webkit-backdrop-filter:blur(24px) saturate(1.4);
+  border-bottom:1px solid rgba(255,255,255,.06);
+  box-shadow:0 1px 0 0 rgba(255,255,255,.02),0 8px 32px -8px rgba(0,0,0,.5),
+             inset 0 -1px 0 0 rgba(255,255,255,.03);}
+.navbar::after{content:'';position:absolute;bottom:-1px;left:10%;right:10%;height:1px;
+  background:linear-gradient(90deg,transparent,
+    color-mix(in srgb,var(--accent-lime) 12%,transparent) 30%,
+    color-mix(in srgb,var(--accent-2) 10%,transparent) 70%,transparent);
+  pointer-events:none;}
+.nav-inner{max-width:1440px;margin:0 auto;display:flex;align-items:center;gap:24px;padding:0 32px;height:64px;}
+.brand{display:flex;align-items:center;gap:10px;flex:0 0 auto;}
+.brand svg{color:var(--ink-2);display:block;filter:drop-shadow(0 0 4px rgba(255,255,255,.08));}
+.brand .name{font-family:var(--font-display);font-size:var(--fs-md2);font-weight:var(--fw-semibold);letter-spacing:var(--ls-widest);color:var(--ink);
+  background:linear-gradient(135deg,#fff 40%,var(--slate) 100%);-webkit-background-clip:text;background-clip:text;
+  -webkit-text-fill-color:transparent;}
+.tabs{display:flex;gap:6px;margin:0 auto;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);
+  border-radius:9999px;padding:4px 5px;}
+.tab{border:0;background:transparent;color:var(--ink-2);font-family:var(--font-display);
+  font-weight:var(--fw-medium);font-size:var(--fs-base);letter-spacing:var(--ls-snug);padding:8px 18px;border-radius:9999px;cursor:pointer;
+  transition:color .2s,background .25s;position:relative;}
+.tab:hover{color:var(--ink);background:rgba(255,255,255,.04);}
+.tab.active{color:var(--bg);background:var(--ink);font-weight:var(--fw-semibold);}
+.tab.active::after{display:none;}
+.tab:focus-visible,.seg button:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:9999px;}
+.nav-right{display:flex;align-items:center;gap:14px;flex:0 0 auto;}
+.nav-right .sub{margin:0;font-size:var(--fs-sm);font-weight:var(--fw-medium);color:var(--slate);font-family:var(--font-body);letter-spacing:var(--ls-wider);text-transform:uppercase;}
+@media(max-width:1080px){ .nav-right .sub{display:none;} }
+@media(max-width:880px){
+  .nav-inner{flex-wrap:wrap;height:auto;padding:12px 18px;gap:12px;}
+  .tabs{order:3;width:100%;margin:4px 0 0;justify-content:space-between;gap:4px;padding:3px 4px;}
+  /* на тач-устройствах кликабельные зоны ≥44px по вертикали */
+  .tab{padding:13px 12px;font-size:var(--fs-sm2);flex:1;text-align:center;}
+  .seg button{padding:10px 14px;}
+}
+.wrap.app{padding-top:28px;}
+.panel{margin-top:6px;}
+.panel[hidden]{display:none;}
+.panel>.card:first-child,.panel>.cols2:first-child,.panel>.tiles:first-child{margin-top:0;}
+.card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;}
+.card-head h2{margin:0;}
+/* segmented control (period / metric) — тёмная пилюля, активный = светлая заливка */
+.seg{display:inline-flex;background:var(--surface-2);border:1px solid var(--border);border-radius:9999px;padding:4px;gap:2px;flex:0 0 auto;}
+.seg button{border:0;background:transparent;color:var(--muted);font-family:var(--font-body);font-size:var(--fs-sm2);font-weight:var(--fw-medium);
+  letter-spacing:0;padding:5px 14px;border-radius:9999px;cursor:pointer;transition:background .14s,color .14s;}
+/* hover-fill (мягкая заливка, не только смена цвета) — приём из коллекции
+   pure-CSS кнопок colorion, приглушённый под токены системы */
+.seg button:hover{color:var(--ink);background:rgba(255,255,255,.055);}
+.seg button.on{background:var(--ink);color:var(--bg);}
+.seg button.on:hover{background:var(--ink);}
+/* ranked records list — editorial rows разделённые hairline mist */
+.rank-list{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;}
+.rank-item{display:flex;align-items:center;gap:16px;padding:16px 4px;background:transparent;
+  border:0;border-bottom:1px solid var(--border);border-radius:0;cursor:pointer;
+  transition:padding-left .18s;}
+.rank-item:last-child{border-bottom:0;}
+.rank-item:hover{padding-left:8px;}
+.rank-item:focus-visible{outline:2px solid var(--focus,var(--accent));outline-offset:-2px;}
+/* клик раскрывает дату рекорда — единственное поле, отсутствующее в свёрнутой строке */
+.rank-detail{display:none;margin-top:6px;color:var(--muted);font-size:var(--fs-sm2);}
+.rank-item.is-open .rank-detail{display:block;}
+.rank-num{font-family:var(--font-display);font-size:var(--fs-lg);font-weight:var(--fw-regular);color:var(--slate);width:24px;text-align:center;flex:0 0 auto;font-variant-numeric:tabular-nums;}
+.rank-dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;}
+.rank-main{flex:1;min-width:0;}
+.rank-name{font-family:var(--font-display);font-weight:var(--fw-regular);letter-spacing:var(--ls-tight);color:var(--ink);font-size:var(--fs-lg);}
+.rank-sub{color:var(--ink-2);font-size:var(--fs-sm2);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.rank-val{font-family:var(--font-data);font-size:var(--fs-4xl);font-weight:var(--fw-semibold);color:var(--ink);flex:0 0 auto;font-variant-numeric:tabular-nums;text-align:right;line-height:var(--lh-snug);}
+.rank-val small{display:block;font-size:var(--fs-xs);font-weight:var(--fw-medium);color:var(--muted);font-family:var(--font-body);text-transform:uppercase;letter-spacing:var(--ls-wide);}
+.badge{display:inline-block;font-family:var(--font-body);font-size:var(--fs-sm);font-weight:var(--fw-medium);padding:2px 9px;border-radius:20px;border:1px solid currentColor;}
+/* ===== инсайты: календарь-теплокарта recovery (стиль GitHub-контрибуций) ===== */
+.hm-wrap{display:flex;gap:10px;align-items:flex-start;overflow-x:auto;padding:4px 2px 2px;}
+.hm-dow{display:grid;grid-template-rows:repeat(7,18px);gap:4px;flex:0 0 auto;}
+.hm-dow span{font-size:var(--fs-xs);line-height:18px;color:var(--slate);text-align:right;padding-right:2px;}
+.hm-grid{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,18px);gap:4px;}
+.hm-cell{width:18px;height:18px;border-radius:3px;background:var(--mist);
+  outline:2px solid transparent;outline-offset:1px;cursor:default;
+  transition:transform .16s,outline-color .16s,opacity .16s;}
+.hm-cell.z-green{background:var(--good);}
+.hm-cell.z-yellow{background:var(--warn);}
+.hm-cell.z-red{background:var(--crit);}
+.hm-cell.z-none{background:var(--mist);}
+.hm-cell.pad{visibility:hidden;}
+.hm-cell.hl{outline-color:var(--ink);transform:scale(1.22);position:relative;z-index:2;}
+.hm-cell:focus-visible{outline-color:var(--ink);}
+.hm-grid.has-hl .hm-cell:not(.hl):not(.pad){opacity:.26;}
+.hm-legend{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:14px;font-size:var(--fs-sm2);color:var(--ink-2);align-items:center;}
+.hm-legend .it{display:inline-flex;align-items:center;gap:7px;}
+.hm-legend .sw{width:11px;height:11px;border-radius:2px;flex:0 0 auto;}
+/* ===== инсайты: встроенная визуализация в карточках ===== */
+.ins-viz{margin-top:14px;display:flex;gap:22px;align-items:center;flex-wrap:wrap;}
+.ins-scatter svg{display:block;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;}
+.rbar{min-width:180px;}
+.rbar .lbl{display:flex;justify-content:space-between;gap:10px;font-size:var(--fs-sm2);margin-bottom:6px;}
+.rbar .nm{font-weight:var(--fw-medium);}
+.rbar .rv{font-family:var(--font-data);color:var(--muted);font-variant-numeric:tabular-nums;}
+.rbar .track{height:6px;border-radius:0;background:var(--mist);border:0;overflow:hidden;}
+.rbar .fill{height:100%;border-radius:0;transition:width .4s cubic-bezier(.22,.9,.3,1);}
+/* clickable evidence-карточка (подсветка дат на календаре) — без цветного
+   борта; выбранность передаёт фон + hint-пилюля */
+.factor-evidence-card.clickable{cursor:pointer;transition:background .18s,transform .18s;}
+.factor-evidence-card.clickable:hover{background:var(--surface-2);transform:translateY(-1px);}
+.factor-evidence-card.clickable:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+.factor-evidence-card.selected{background:var(--surface-2);}
+.factor-evidence-card .hint{display:inline-block;margin-top:10px;font-family:var(--font-body);font-size:var(--fs-sm);color:var(--accent-2);
+  background:transparent;border:1px solid var(--border);border-radius:20px;padding:2px 11px;
+  /* подсказка-affordance скрыта в компактном виде дашборда; проявляется в момент
+     намерения — hover/фокус карточки или активная подсветка (место в потоке
+     зарезервировано, чтобы карточка не прыгала по высоте) */
+  opacity:0;transform:translateY(3px);transition:opacity .22s ease,transform .22s ease;}
+.factor-evidence-card.clickable:hover .hint,.factor-evidence-card.clickable:focus-visible .hint,.factor-evidence-card.selected .hint{opacity:1;transform:none;}
+.factor-evidence-card.selected .hint{color:var(--ink);border-color:var(--ink);}
+/* ===== motion: пружинный каскад при входе/смене вкладки (editorial-сдержанный) ===== */
+@keyframes rise{
+  from{opacity:0;transform:translateY(16px) scale(.98);}
+  to{opacity:1;transform:none;}
+}
+.panel:not([hidden]) .card,.panel:not([hidden]) .tiles,
+.panel:not([hidden]) .insights > .card{
+  animation:rise .5s cubic-bezier(.34,1.4,.5,1) both;transform-origin:50% 85%;}
+/* SVG-элементы под курсором: пружинное увеличение точки / вытягивание бара */
+svg .hoverable{transform-box:fill-box;transform-origin:center;
+  transition:transform .28s cubic-bezier(.34,1.5,.5,1),filter .2s;}
+svg circle.hoverable:hover{transform:scale(1.4);}
+svg rect.hoverable{transform-origin:50% 100%;}
+svg rect.hoverable:hover{transform:scaleY(1.05) scaleX(1.12);filter:brightness(1.06);}
+/* плавное появление нового графика при смене периода/метрики (crossfade в JS) */
+@keyframes chartIn{from{opacity:0;transform:translateY(7px) scale(.99);}to{opacity:1;transform:none;}}
+.panel:not([hidden])>*:nth-child(2){animation-delay:.05s;}
+.panel:not([hidden])>*:nth-child(3){animation-delay:.1s;}
+.panel:not([hidden])>*:nth-child(4){animation-delay:.15s;}
+.panel:not([hidden]) .bento>.card:nth-child(2){animation-delay:.06s;}
+.panel:not([hidden]) .bento>.card:nth-child(3){animation-delay:.12s;}
+.panel:not([hidden]) .bento>.card:nth-child(n+4){animation-delay:.18s;}
+.panel:not([hidden]) .insights > .card:nth-child(2){animation-delay:.06s;}
+.panel:not([hidden]) .insights > .card:nth-child(3){animation-delay:.12s;}
+.panel:not([hidden]) .insights > .card:nth-child(4){animation-delay:.18s;}
+.panel:not([hidden]) .insights > .card:nth-child(5){animation-delay:.24s;}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important;}
+}
+/* ===================== transitions-dev =====================
+   Библиотека переходов (skill .agents/skills/transitions-dev). Токены и CSS
+   сниппетов вставлены как есть; тюнинг — только через переменные ниже или
+   локальные override-ы в конце блока. Используются: number pop-in (цифры
+   метрик), text swap (статус подсветки календаря), icon swap (иконка
+   кликабельного инсайта), panel reveal (аннотация в детальном оверлее). */
+/* transitions-dev — copy this :root block into your project once.
+   Every transition snippet reads from these semantic names. */
+:root {
+  /* Card resize */
+  --resize-dur: 300ms;
+  --resize-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Number pop-in */
+  --digit-dur: 500ms;
+  --digit-distance: 8px;
+  --digit-stagger: 70ms;
+  --digit-blur: 2px;
+  --digit-ease: cubic-bezier(0.34, 1.45, 0.64, 1);
+  --digit-dir-x: 0;
+  --digit-dir-y: 1;
+  /* Notification badge */
+  --badge-slide-dur: 260ms;
+  --badge-pop-dur: 500ms;
+  --badge-pop-close-dur: 180ms;
+  --badge-fade-dur: 400ms;
+  --badge-fade-close-dur: 180ms;
+  --badge-blur: 2px;
+  --badge-offset-x: -8.2px;
+  --badge-offset-y: 12.4px;
+  --badge-slide-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --badge-pop-ease: cubic-bezier(0.34, 1.36, 0.64, 1);
+  --badge-close-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  /* Text states swap */
+  --text-swap-dur: 200ms;
+  --text-swap-translate-y: 8px;
+  --text-swap-blur: 2px;
+  --text-swap-ease: ease-out;
+  /* Menu dropdown */
+  --dropdown-open-dur: 250ms;
+  --dropdown-close-dur: 150ms;
+  --dropdown-pre-scale: 0.97;
+  --dropdown-closing-scale: 0.99;
+  --dropdown-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Modal open / close */
+  --modal-open-dur: 250ms;
+  --modal-close-dur: 150ms;
+  --modal-scale: 0.96;
+  --modal-scale-close: 0.96;
+  --modal-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Panel reveal */
+  --panel-open-dur: 400ms;
+  --panel-close-dur: 350ms;
+  --panel-translate-y: 100px;
+  --panel-blur: 2px;
+  --panel-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Page side-by-side */
+  --page-slide-dur: 200ms;
+  --page-fade-dur: 200ms;
+  --page-slide-distance: 8px;
+  --page-blur: 3px;
+  --page-stagger: 0ms;
+  --page-exit-enabled: 1;
+  --page-slide-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --page-fade-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Icon swap */
+  --icon-swap-dur: 200ms;
+  --icon-swap-blur: 2px;
+  --icon-swap-start-scale: 0.25;
+  --icon-swap-ease: ease-in-out;
+  /* Success check */
+  --check-opacity-dur: 550ms;
+  --check-rotate-dur: 550ms;
+  --check-rotate-from: 80deg;
+  --check-bob-dur: 450ms;
+  --check-y-amount: 40px;
+  --check-blur-dur: 500ms;
+  --check-blur-from: 10px;
+  --check-path-dur: 550ms;
+  --check-path-delay: 80ms;
+  --check-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --check-ease-opacity: cubic-bezier(0.22, 1, 0.36, 1);
+  --check-ease-rotate: cubic-bezier(0.22, 1, 0.36, 1);
+  --check-ease-bob: cubic-bezier(0.34, 1.35, 0.64, 1);
+  --check-ease-path: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Avatar group hover */
+  --avatar-lift: -4px;
+  --avatar-dur: 320ms;
+  --avatar-scale: 1.05;
+  --avatar-falloff: 0.45;
+  --avatar-ease-in: cubic-bezier(0.22, 1, 0.36, 1);
+  --avatar-ease-out: cubic-bezier(0.34, 3.85, 0.64, 1);
+  /* Error state shake */
+  --shake-distance: 6px;
+  --shake-overshoot: 4px;
+  --shake-dur-a: 80ms;
+  --shake-dur-b: 60ms;
+  --shake-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --revert-hold: 3000ms;
+  --revert-dur: 280ms;
+}
+/* --- number pop-in --- */
+@keyframes t-digit-pop-in {
+  0%   {
+    transform: translate(
+      calc(var(--digit-distance) * var(--digit-dir-x)),
+      calc(var(--digit-distance) * var(--digit-dir-y))
+    );
+    opacity: 0;
+    filter: blur(var(--digit-blur));
+  }
+  100% { transform: translate(0, 0); opacity: 1; filter: blur(0); }
+}
+.t-digit-group {
+  display: inline-flex;
+  align-items: baseline;
+}
+.t-digit {
+  display: inline-block;
+  will-change: transform, opacity, filter;
+}
+.t-digit-group.is-animating .t-digit {
+  animation: t-digit-pop-in var(--digit-dur) var(--digit-ease) both;
+}
+.t-digit-group.is-animating .t-digit[data-stagger="1"] {
+  animation-delay: var(--digit-stagger);
+}
+.t-digit-group.is-animating .t-digit[data-stagger="2"] {
+  animation-delay: calc(var(--digit-stagger) * 2);
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-digit-group .t-digit { animation: none !important; }
+}
+/* --- text states swap --- */
+.t-text-swap {
+  display: inline-block;
+  transform: translateY(0);
+  filter: blur(0);
+  opacity: 1;
+  transition:
+    transform var(--text-swap-dur) var(--text-swap-ease),
+    filter    var(--text-swap-dur) var(--text-swap-ease),
+    opacity   var(--text-swap-dur) var(--text-swap-ease);
+  will-change: transform, filter, opacity;
+}
+.t-text-swap.is-exit {
+  transform: translateY(calc(var(--text-swap-translate-y) * -1));
+  filter: blur(var(--text-swap-blur));
+  opacity: 0;
+}
+.t-text-swap.is-enter-start {
+  transform: translateY(var(--text-swap-translate-y));
+  filter: blur(var(--text-swap-blur));
+  opacity: 0;
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-text-swap { transition: none !important; }
+}
+/* --- icon swap --- */
+.t-icon-swap {
+  position: relative;
+  display: inline-grid;
+}
+.t-icon-swap .t-icon {
+  grid-area: 1 / 1;
+  transition:
+    opacity   var(--icon-swap-dur) var(--icon-swap-ease),
+    filter    var(--icon-swap-dur) var(--icon-swap-ease),
+    transform var(--icon-swap-dur) var(--icon-swap-ease);
+  will-change: opacity, filter, transform;
+}
+.t-icon-swap[data-state="a"] .t-icon[data-icon="a"],
+.t-icon-swap[data-state="b"] .t-icon[data-icon="b"] {
+  opacity: 1;
+  filter: blur(0);
+  transform: scale(1);
+}
+.t-icon-swap[data-state="a"] .t-icon[data-icon="b"],
+.t-icon-swap[data-state="b"] .t-icon[data-icon="a"] {
+  opacity: 0;
+  filter: blur(var(--icon-swap-blur));
+  transform: scale(var(--icon-swap-start-scale));
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-icon-swap .t-icon { transition: none !important; }
+}
+/* --- panel reveal --- */
+.t-panel-slide {
+  transform: translateY(var(--panel-translate-y));
+  opacity: 0;
+  filter: blur(var(--panel-blur));
+  pointer-events: none;
+  transition:
+    transform var(--panel-close-dur) var(--panel-ease),
+    opacity   var(--panel-close-dur) var(--panel-ease),
+    filter    var(--panel-close-dur) var(--panel-ease);
+  will-change: transform, opacity, filter;
+}
+.t-panel-slide[data-open="true"] {
+  transform: translateY(0);
+  opacity: 1;
+  filter: blur(0);
+  pointer-events: auto;
+  transition:
+    transform var(--panel-open-dur) var(--panel-ease),
+    opacity   var(--panel-open-dur) var(--panel-ease),
+    filter    var(--panel-open-dur) var(--panel-ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-panel-slide { transition: none !important; }
+}
+/* --- локальный тюнинг токенов под дашборд (правим переменные, не сниппеты) --- */
+/* цифры датчика recovery живут в SVG viewBox 0 0 100 — дистанция в юнитах меньше */
+.gauge-wrap .t-digit-group{--digit-distance:5px;}
+/* аннотация в оверлее въезжает коротко, а не на все 100px */
+.sheet .data-note.t-panel-slide{--panel-translate-y:16px;}
+/* пустой динамический тег (статус подсветки календаря) не должен висеть пустой пилюлей */
+.tag[hidden]{display:none;}
+/* карточки, ставшие раскрываемыми (ритм недели, датчик) — якорь для .expand-hint */
+.card.expandable{position:relative;}
+/* ================== /transitions-dev ================== */
+/* JARVIS LIQUID GLASS 2026
+   Web approximation: transparent material, edge refraction and fixed WebGL art.
+   Functional WHOOP colors remain semantic; violet is atmospheric chrome only. */
+:root{
+  --bg:#05030A;--surface:#100D18;--surface-2:#181322;--surface-3:#241C31;
+  --ink:#F8F7FB;--ink-2:#C6C0D0;--muted:#AAA2B7;--slate:#938A9F;
+  --border:rgba(255,255,255,.10);--border-strong:rgba(255,255,255,.18);
+  --grid:rgba(255,255,255,.075);--axis:rgba(255,255,255,.16);
+  --violet:#9470FF;--violet-soft:rgba(148,112,255,.18);
+  --glass-grad:linear-gradient(145deg,rgba(20,16,29,.64),rgba(11,9,17,.46) 56%,rgba(26,19,38,.40));
+  --glass-grad-hover:linear-gradient(145deg,rgba(28,22,40,.72),rgba(15,12,22,.50) 58%,rgba(35,25,50,.44));
+  --glass-shadow:inset 0 1px 0 rgba(255,255,255,.09),inset 0 -1px 0 rgba(255,255,255,.025),0 24px 70px -38px rgba(0,0,0,.92);
+  --card-padding:28px;--element-gap:18px;--panel-translate-y:18px;--panel-open-dur:360ms;--panel-close-dur:220ms;
+  --avatar-lift:-2px;--avatar-scale:1.018;--avatar-falloff:.35;
+}
+html{background:var(--bg);scrollbar-color:rgba(148,112,255,.42) rgba(5,3,10,.82);}
+body{min-height:100dvh;overflow-x:hidden;background:var(--bg);}
+body::after{content:"";position:fixed;inset:0;z-index:1;pointer-events:none;background:radial-gradient(ellipse at 50% -12%,transparent 0%,rgba(5,3,10,.08) 42%,rgba(5,3,10,.56) 100%);}
+.bg-layers{background:radial-gradient(circle at 16% 12%,rgba(126,80,255,.20),transparent 34%),radial-gradient(circle at 86% 68%,rgba(91,46,188,.18),transparent 38%),#05030A;}
+.bg-layers .warp{position:absolute;inset:-3%;width:106%;height:106%;display:block;opacity:.82;filter:saturate(.92) contrast(1.05);transform:scale(1.01);}
+.bg-layers::before{content:"";position:absolute;inset:0;z-index:2;background:linear-gradient(180deg,rgba(5,3,10,.24),rgba(5,3,10,.46) 68%,rgba(5,3,10,.72));}
+.bg-layers::after{content:"";position:absolute;inset:0;z-index:3;opacity:.075;mix-blend-mode:soft-light;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");}
+.shell{z-index:10;max-width:1520px;padding:14px 18px 0;}
+.wrap{max-width:1380px;padding:34px 34px 112px;}
+.glass,.card,.tile{background:var(--glass-grad);backdrop-filter:blur(28px) saturate(1.18);-webkit-backdrop-filter:blur(28px) saturate(1.18);border-color:var(--border);box-shadow:var(--glass-shadow);}
+.card,.tile,.ov-hero{isolation:isolate;}
+.card{border-radius:22px;padding:var(--card-padding);}
+.card:hover{background:var(--glass-grad-hover);border-color:var(--border-strong);}
+.card.expandable:hover{transform:translateY(-1px);}
+.tile{border-radius:20px;aspect-ratio:auto;min-height:154px;padding:22px;}
+.tile::after{content:"";position:absolute;left:20px;right:20px;top:0;height:1px;background:linear-gradient(90deg,transparent,var(--tile-line),transparent);opacity:.72;}
+.tile.expandable:hover{transform:translateY(-3px);box-shadow:var(--glass-shadow),0 22px 44px -32px rgba(148,112,255,.55);}
+.tile .v{font-size:var(--fs-tile-value);}
+.navbar{top:14px;border:1px solid rgba(255,255,255,.11);border-radius:20px;background:linear-gradient(135deg,rgba(18,14,27,.78),rgba(8,7,13,.62));backdrop-filter:blur(30px) saturate(1.35);-webkit-backdrop-filter:blur(30px) saturate(1.35);box-shadow:inset 0 1px 0 rgba(255,255,255,.10),0 24px 60px -34px rgba(0,0,0,.95);overflow:hidden;}
+.navbar::after{left:18%;right:18%;background:linear-gradient(90deg,transparent,rgba(148,112,255,.42),transparent);}
+.nav-inner{height:70px;padding:0 22px;gap:20px;}
+.brand{gap:12px;min-width:188px;}
+.brand-mark{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;color:var(--ink);background:linear-gradient(145deg,rgba(148,112,255,.26),rgba(255,255,255,.055));border:1px solid rgba(255,255,255,.12);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 10px 22px -15px rgba(148,112,255,.9);}
+.brand-copy{display:flex;flex-direction:column;line-height:var(--lh-tight);gap:4px;}
+.brand .name{font-size:var(--fs-md2);letter-spacing:var(--ls-widest);}
+.brand-copy small{font-size:var(--fs-2xs);letter-spacing:var(--ls-widest);text-transform:uppercase;color:var(--slate);font-weight:var(--fw-semibold);}
+.tabs{background:rgba(6,4,10,.36);border-color:rgba(255,255,255,.08);padding:5px;box-shadow:inset 0 1px 0 rgba(255,255,255,.035);}
+.tab{min-height:38px;padding:8px 17px;color:var(--muted);}
+.tab:hover{background:rgba(148,112,255,.10);}
+.tab.active{color:#fff;background:linear-gradient(135deg,rgba(148,112,255,.92),rgba(105,68,207,.92));box-shadow:inset 0 1px 0 rgba(255,255,255,.27),0 8px 24px -14px rgba(148,112,255,.95);}
+.tab:focus-visible,.seg button:focus-visible{outline-color:var(--violet);}
+.nav-right{min-width:188px;justify-content:flex-end;}
+.nav-right .sub{padding:7px 11px;border:1px solid rgba(255,255,255,.08);border-radius:999px;background:rgba(255,255,255,.03);}
+.ov-hero{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:28px;margin:0 0 38px;padding:38px 40px;border:1px solid rgba(255,255,255,.12);border-radius:28px;background:linear-gradient(135deg,rgba(22,16,34,.66),rgba(9,7,14,.43) 58%,rgba(50,31,80,.30));backdrop-filter:blur(30px) saturate(1.16);-webkit-backdrop-filter:blur(30px) saturate(1.16);box-shadow:var(--glass-shadow);overflow:hidden;}
+.ov-hero::before{content:"";position:absolute;width:440px;height:440px;right:-180px;top:-250px;border-radius:50%;background:radial-gradient(circle,rgba(148,112,255,.24),transparent 68%);filter:blur(10px);z-index:-1;}
+.hero-copy{max-width:780px;}
+.ov-hero h1{font-size:var(--fs-panel-h1);font-weight:var(--fw-light);letter-spacing:var(--ls-tighter);line-height:var(--lh-tight);margin:0 0 16px;color:var(--ink);background:none;-webkit-text-fill-color:currentColor;}
+.ov-hero p{font-size:var(--fs-md2);max-width:68ch;color:var(--ink-2);}
+.hero-side{display:flex;align-items:center;gap:18px;padding-left:28px;border-left:1px solid rgba(255,255,255,.10);}
+.hero-score{min-width:112px;text-align:right;}
+.hero-score .score{font-family:var(--font-data);font-size:var(--fs-hero-score);line-height:var(--lh-tight);font-weight:var(--fw-regular);letter-spacing:var(--ls-tightest);}
+.hero-score .score small{font-size:var(--fs-2xl);letter-spacing:var(--ls-tight);color:var(--slate);margin-left:3px;}
+.hero-score .score-label{display:block;margin-top:10px;color:var(--slate);font-size:var(--fs-2xs);font-weight:var(--fw-semibold);letter-spacing:var(--ls-widest);text-transform:uppercase;}
+.readiness{background:rgba(6,5,10,.38);border-color:rgba(255,255,255,.12);padding:10px 15px;}
+.hero-meta{grid-column:1/-1;display:flex;gap:10px;flex-wrap:wrap;padding-top:22px;border-top:1px solid rgba(255,255,255,.08);}
+.hero-meta span{display:inline-flex;align-items:center;gap:7px;min-height:32px;padding:6px 11px;border-radius:999px;color:var(--muted);background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.075);font-size:var(--fs-sm);}
+.hero-meta b{color:var(--ink);font-weight:var(--fw-semibold);}
+.section-heading{display:flex;flex-direction:column;align-items:flex-start;gap:3px;margin:0 2px 16px;}
+.section-heading h2{margin:0;font-size:var(--fs-3xl);font-weight:var(--fw-medium);letter-spacing:var(--ls-tight);}
+.section-heading p{margin:0;color:var(--slate);font-size:var(--fs-sm2);}
+.bento{margin-top:0}.overview-depth{margin-top:34px}
+.panel-intro{display:flex;flex-direction:column;align-items:flex-start;gap:9px;margin:4px 2px 26px;max-width:720px;}
+.panel-intro h1{margin:0;font-size:var(--fs-panel-h1);font-weight:var(--fw-light);letter-spacing:var(--ls-tighter);line-height:var(--lh-tight);}
+.panel-intro p{margin:0;max-width:62ch;color:var(--muted);font-size:var(--fs-base);line-height:var(--lh-relaxed);}
+.panel{--panel-translate-y:18px;}
+.panel:not([hidden]) .card,.panel:not([hidden]) .tiles,.panel:not([hidden]) .insights > .card{animation:none;}
+.t-avatar{transform-origin:center;transform:translateY(var(--shift,0px)) scale(var(--scale-active,1));transition:transform var(--avatar-dur) var(--avatar-ease-in);will-change:transform;}
+.sheet{background:linear-gradient(145deg,rgba(24,19,34,.97),rgba(10,8,15,.96));border-color:rgba(255,255,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.10),0 40px 100px -24px rgba(0,0,0,.92);}
+.sheet-backdrop{background:rgba(3,2,6,.68);backdrop-filter:blur(10px) saturate(.78);-webkit-backdrop-filter:blur(10px) saturate(.78);}
+@media (prefers-reduced-motion:reduce){.t-avatar{transition:none!important;transform:none!important}.bg-layers .warp{transform:none}}
+@media (prefers-reduced-transparency:reduce){.glass,.card,.tile,.ov-hero,.navbar{background:rgba(16,13,24,.96);backdrop-filter:none;-webkit-backdrop-filter:none}}
+@media(max-width:1040px){.nav-right{min-width:auto}.brand{min-width:auto}.brand-copy small{display:none}.ov-hero{grid-template-columns:1fr}.hero-side{padding:0;border:0;justify-content:flex-start}.hero-score{text-align:left}}
+@media(max-width:880px){.shell{padding:0}.navbar{top:0;border-radius:0;border-left:0;border-right:0}.nav-inner{padding:12px 16px}.tabs{overflow-x:auto;justify-content:flex-start}.tab{flex:0 0 auto;min-width:112px}.wrap{padding:26px 20px 88px}}
+@media(max-width:640px){:root{--card-padding:21px;--element-gap:14px}.wrap{padding:22px 14px 72px}.ov-hero{padding:27px 23px;border-radius:23px;gap:22px;margin-bottom:28px}.ov-hero h1{font-size:var(--fs-panel-h1)}.hero-side{align-items:flex-end}.hero-score .score{font-size:var(--fs-hero-score-mobile)}.readiness{white-space:normal}.hero-meta{gap:7px}.hero-meta span{font-size:var(--fs-xs)}.tiles{grid-template-columns:1fr 1fr}.tile{min-height:132px;padding:18px}.tile .v{font-size:var(--fs-tile-value-mobile)}.card{border-radius:18px}.brand-copy{display:none}.brand-mark{width:36px;height:36px}}
+.brand>svg{width:38px;height:38px;padding:8px;border-radius:12px;color:var(--ink);background:linear-gradient(145deg,rgba(148,112,255,.24),rgba(255,255,255,.05));border:1px solid rgba(255,255,255,.12);box-shadow:inset 0 1px 0 rgba(255,255,255,.14);}
+.ov-hero{grid-template-columns:minmax(0,1fr) auto auto;}
+.ov-hero>div:first-child{min-width:0;}
+.panel-intro+.card{margin-top:0;}
+.tab:active,.seg button:active,.sheet-x:active{transform:scale(.98);}
+.card.expandable:active,.spark-mini.expandable:active{transform:translateY(1px) scale(.995);}
+.panel.t-panel-slide{--panel-translate-y:16px;}
+@media(max-width:1040px){
+  .ov-hero{grid-template-columns:1fr auto;}
+  .ov-hero>div:first-child{grid-column:1/-1;}
+  .hero-meta{grid-column:1/-1;}
+}
+@media(max-width:640px){
+  .ov-hero{grid-template-columns:1fr;}
+  .hero-score,.readiness{justify-self:start;text-align:left;}
+  .tiles{grid-template-columns:1fr 1fr;}
+}
+@media(max-width:390px){.tiles{grid-template-columns:1fr;}}
+@media(max-width:880px){
+  .nav-inner{height:auto;min-height:70px;flex-wrap:wrap;gap:10px;}
+  .tabs{order:3;width:100%;margin:2px 0 0;overflow-x:auto;justify-content:flex-start;scrollbar-width:none;}
+  .tabs::-webkit-scrollbar{display:none;}
+}
+@media(max-width:640px){
+  .nav-right{display:none;}
+}
+@media(max-width:640px){
+  .tabs{justify-content:space-between;overflow-x:hidden;}
+  .tab{min-width:0;min-height:44px;flex:1;padding:12px 5px;font-size:var(--fs-sm);}
+}
+</style>
+<style id="physiological-horizon-design">
+/*__DESIGN_CSS__*/
+</style>
+</head>
+<body class="viz-root">
+<!-- фоновые слои: тёмный фон дашборда + анимированные лучи (Beams). Без зерна/noise. -->
+<div class="bg-layers" aria-hidden="true">
+  <!-- Static CSS atmosphere only: no continuous canvas or WebGL animation. -->
+  <script>document.getElementById('beamsCanvas')?.remove();</script>
+</div>
+<script>
+// Beams background — анимированные световые лучи поверх тёмного фона дашборда (var(--bg)).
+// Портировано с React/canvas компонента 21st.dev: та же механика (лучи едут вверх, ресетятся
+// по трём колонкам, пульсируют), без React-обвязки. per-frame ctx.filter blur(35px) из
+// оригинала намеренно не перенесён — это дорогой CPU-пересчёт всего canvas на каждый кадр;
+// вместо него мягкость даёт дешёвый CSS `filter:blur()` на самом <canvas> (композитится на GPU).
+(function(){
+  const canvas=document.getElementById('beamsCanvas');
+  if(!canvas)return;
+  const ctx=canvas.getContext('2d');
+  if(!ctx)return;
+
+  const reduceMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Палитра — строго как в оригинальном компоненте (@kokonutd/beams-background,
+  // 21st.dev): непрерывная холодная семья hue 190-260 (сине-фиолетовый), без привязки
+  // к акцентам дашборда. Насыщенность/яркость тоже оригинальные (85%/65%) —
+  // приглушённость даёт только сильно урезанный opacity + более сильный blur.
+  const MIN_BEAMS=14;
+  let beams=[],width=0,height=0,dpr=1,raf=null,resizeTimer=null;
+
+  // Градиент луча зависит только от hue/length → строится один раз при создании
+  // и при ресете (когда меняется hue). Пульсация — это просто множитель альфы,
+  // её даёт ctx.globalAlpha в drawBeam. Раньше createLinearGradient + 6 стопов
+  // создавались на КАЖДЫЙ луч КАЖДЫЙ кадр (~1200 объектов/сек впустую).
+  function makeGradient(beam){
+    const g=ctx.createLinearGradient(0,0,0,beam.length);
+    const c=a=>`hsla(${beam.hue},85%,65%,${a})`;
+    g.addColorStop(0,c(0));
+    g.addColorStop(0.12,c(0.5));
+    g.addColorStop(0.4,c(1));
+    g.addColorStop(0.6,c(1));
+    g.addColorStop(0.88,c(0.5));
+    g.addColorStop(1,c(0));
+    beam.grad=g;
+  }
+
+  function createBeam(w,h){
+    const beam={
+      x:Math.random()*w*1.5-w*0.25,
+      y:Math.random()*h*1.5-h*0.25,
+      width:50+Math.random()*90,
+      length:h*2.4,
+      angle:-32+Math.random()*8,
+      speed:0.18+Math.random()*0.3,
+      opacity:0.06+Math.random()*0.06,
+      hue:190+Math.random()*70,
+      pulse:Math.random()*Math.PI*2,
+      pulseSpeed:0.008+Math.random()*0.012,
+    };
+    makeGradient(beam);
+    return beam;
+  }
+
+  function resetBeam(beam,index,total){
+    const column=index%3,spacing=width/3;
+    beam.y=height+120;
+    beam.x=column*spacing+spacing/2+(Math.random()-0.5)*spacing*0.6;
+    beam.width=70+Math.random()*90;
+    beam.speed=0.18+Math.random()*0.24;
+    beam.hue=190+(index*70)/total;
+    beam.opacity=0.07+Math.random()*0.06;
+    makeGradient(beam);
+  }
+
+  function drawBeam(beam){
+    ctx.save();
+    ctx.translate(beam.x,beam.y);
+    ctx.rotate(beam.angle*Math.PI/180);
+    ctx.globalAlpha=beam.opacity*(0.85+Math.sin(beam.pulse)*0.15);
+    ctx.fillStyle=beam.grad;
+    ctx.fillRect(-beam.width/2,0,beam.width,beam.length);
+    ctx.restore();
+  }
+
+  function updateSize(){
+    dpr=Math.min(window.devicePixelRatio||1,1.5);
+    width=window.innerWidth;height=window.innerHeight;
+    canvas.width=width*dpr;canvas.height=height*dpr;
+    canvas.style.width=width+'px';canvas.style.height=height+'px';
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    const total=Math.round(MIN_BEAMS*1.4);
+    beams=Array.from({length:total},()=>createBeam(width,height));
+  }
+
+  function renderStatic(){ctx.clearRect(0,0,width,height);beams.forEach(drawBeam);}
+
+  function animate(){
+    ctx.clearRect(0,0,width,height);
+    const total=beams.length;
+    beams.forEach((beam,i)=>{
+      beam.y-=beam.speed;
+      beam.pulse+=beam.pulseSpeed;
+      if(beam.y+beam.length<-120)resetBeam(beam,i,total);
+      drawBeam(beam);
+    });
+    raf=requestAnimationFrame(animate);
+  }
+
+  updateSize();
+
+  if(reduceMotion){
+    renderStatic();
+  }else{
+    animate();
+    // пауза в фоновой вкладке — не жжём CPU/GPU впустую и не мешаем другим анимациям страницы
+    document.addEventListener('visibilitychange',()=>{
+      if(document.hidden){if(raf)cancelAnimationFrame(raf);raf=null;}
+      else if(!raf)animate();
+    });
+  }
+
+  window.addEventListener('resize',()=>{
+    clearTimeout(resizeTimer);
+    resizeTimer=setTimeout(()=>{updateSize();if(reduceMotion)renderStatic();},150);
+  });
+})();
+</script>
+<script>
+// Purple-black liquid field inspired by the supplied Warp reference.
+// Standalone WebGL keeps the generated dashboard independent from React/npm.
+(function(){
+  const canvas=document.getElementById('warpCanvas');if(!canvas)return;
+  const gl=canvas.getContext('webgl',{alpha:false,antialias:false,powerPreference:'low-power'});
+  if(!gl){canvas.style.background='radial-gradient(circle at 25% 15%,#5b33ad 0,transparent 38%),radial-gradient(circle at 76% 68%,#2a125c 0,transparent 42%),#05030a';return;}
+  const vertex=`
+    attribute vec2 a_position;
+    void main(){gl_Position=vec4(a_position,0.0,1.0);}
+  `;
+  const fragment=`
+    precision highp float;
+    uniform vec2 u_resolution;
+    uniform float u_time;
+
+    float hash(vec2 p){
+      p=fract(p*vec2(123.34,345.45));
+      p+=dot(p,p+34.345);
+      return fract(p.x*p.y);
+    }
+    float noise(vec2 p){
+      vec2 i=floor(p),f=fract(p);
+      f=f*f*(3.0-2.0*f);
+      return mix(mix(hash(i),hash(i+vec2(1.0,0.0)),f.x),
+                 mix(hash(i+vec2(0.0,1.0)),hash(i+vec2(1.0)),f.x),f.y);
+    }
+    float fbm(vec2 p){
+      float v=0.0,a=0.54;
+      mat2 m=mat2(0.80,0.60,-0.60,0.80);
+      for(int i=0;i<5;i++){v+=a*noise(p);p=m*p*2.02+17.17;a*=0.50;}
+      return v;
+    }
+    mat2 rot(float a){float s=sin(a),c=cos(a);return mat2(c,-s,s,c);}
+    void main(){
+      vec2 uv=(gl_FragCoord.xy-0.5*u_resolution.xy)/min(u_resolution.x,u_resolution.y);
+      float t=u_time*0.045;
+      vec2 p=rot(-0.24)*uv*1.22;
+      float radial=length(p);
+      float angle=atan(p.y,p.x);
+
+      vec2 q=vec2(
+        fbm(p+vec2(t*0.22,-t*0.14)),
+        fbm(p+vec2(4.2,-2.7)+vec2(-t*0.12,t*0.18))
+      );
+      vec2 swirl=rot((q.x-q.y)*2.4+radial*0.62)*p;
+      vec2 r=vec2(
+        fbm(swirl+2.25*q+vec2(1.7,8.1)+t*0.08),
+        fbm(swirl+2.05*q+vec2(8.3,2.8)-t*0.07)
+      );
+      float field=fbm(swirl+2.7*r+0.52*q);
+      float ribbon=0.5+0.5*sin(field*12.2+r.x*5.0+angle*1.15-radial*2.4+t);
+      float fold=pow(1.0-abs(ribbon*2.0-1.0),3.2);
+      float body=smoothstep(0.20,0.84,field*0.76+ribbon*0.36);
+
+      vec3 ink=vec3(0.018,0.011,0.030);
+      vec3 plum=vec3(0.105,0.052,0.205);
+      vec3 violet=vec3(0.315,0.174,0.690);
+      vec3 silk=vec3(0.585,0.420,0.980);
+      vec3 col=mix(ink,plum,smoothstep(0.22,0.66,field));
+      col=mix(col,violet,body*0.68);
+      col+=silk*fold*body*0.26;
+      col=mix(col,ink,smoothstep(0.70,1.14,radial)*0.72);
+      col*=0.90+0.10*smoothstep(0.10,0.78,field);
+      gl_FragColor=vec4(col,1.0);
+    }
+  `;
+  function shader(type,source){
+    const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);
+    if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){console.warn('Warp shader:',gl.getShaderInfoLog(s));return null;}
+    return s;
+  }
+  const vs=shader(gl.VERTEX_SHADER,vertex),fs=shader(gl.FRAGMENT_SHADER,fragment);if(!vs||!fs)return;
+  const program=gl.createProgram();gl.attachShader(program,vs);gl.attachShader(program,fs);gl.linkProgram(program);
+  if(!gl.getProgramParameter(program,gl.LINK_STATUS)){console.warn('Warp program:',gl.getProgramInfoLog(program));return;}
+  const buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
+  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),gl.STATIC_DRAW);
+  gl.useProgram(program);
+  const pos=gl.getAttribLocation(program,'a_position');gl.enableVertexAttribArray(pos);gl.vertexAttribPointer(pos,2,gl.FLOAT,false,0,0);
+  const res=gl.getUniformLocation(program,'u_resolution'),time=gl.getUniformLocation(program,'u_time');
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  let start=performance.now(),raf=0,resizeTimer=0;
+  function resize(){
+    const dpr=Math.min(devicePixelRatio||1,1.25),w=Math.round(innerWidth*dpr),h=Math.round(innerHeight*dpr);
+    if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;gl.viewport(0,0,w,h);}
+  }
+  function draw(now){
+    resize();gl.uniform2f(res,canvas.width,canvas.height);
+    gl.uniform1f(time,reduce?0:(now-start)/1000);
+    gl.drawArrays(gl.TRIANGLES,0,6);
+    if(!reduce&&!document.hidden)raf=requestAnimationFrame(draw);
+  }
+  function resume(){if(document.hidden){cancelAnimationFrame(raf);raf=0;}else if(!raf){start=performance.now();raf=requestAnimationFrame(draw);}}
+  document.addEventListener('visibilitychange',resume);
+  /*
+  addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>draw(performance.now()),120);});
+  */
+  addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{resize();if(reduce)draw(performance.now());},120);});
+  draw(performance.now());
+})();
+</script>
+<div class="shell">
+<nav class="navbar">
+  <div class="nav-inner">
+    <div class="brand">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
+      <span class="name">DASHBOARD</span>
+    </div>
+    <div class="tabs" id="tabs" role="tablist" aria-label="WHOOP Dashboard sections">
+      <button class="tab" data-tab="overview" role="tab" aria-selected="false" aria-controls="panel-overview">State</button>
+      <button class="tab" data-tab="analytics" role="tab" aria-selected="false" aria-controls="panel-analytics">Trends</button>
+      <button class="tab" data-tab="insights" role="tab" aria-selected="false" aria-controls="panel-insights">Factors</button>
+      <button class="tab" data-tab="workouts" role="tab" aria-selected="false" aria-controls="panel-workouts">Activity</button>
+    </div>
+    <div class="nav-right">
+      <span class="sub" id="daterange"></span>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap app">
+  <!-- ========== ОБЗОР ========== -->
+  <section class="panel" data-panel="overview" id="panel-overview" role="tabpanel">
+    <!-- Hero: крупный заголовок + подзаголовок-контекст + чип готовности -->
+    <div class="ov-hero">
+      <div>
+        <h1>Daily state</h1>
+        <p id="hero_sub"></p>
+      </div>
+      <div class="readiness" id="hero_verdict"></div>
+    </div>
+    <!-- 6 метрик-плиток -->
+    <div class="section-heading">
+      <h2>Period signals</h2>
+      <p>Volume, load, and Recovery distribution</p>
+    </div>
+    <div class="tiles" id="tiles"></div>
+    <div class="section-heading overview-depth">
+      <h2>System state</h2>
+      <p>Select a metric to open its detailed chart</p>
+    </div>
+    <div class="bento">
+      <!-- Биометрические тренды (span 2): стопка спарклайнов -->
+      <div class="card bento-2">
+        <div class="card-head">
+          <div><h2>Physiological signals</h2><p class="desc" id="trend_sub" style="margin:0"></p></div>
+        </div>
+        <div class="trend-rows" id="trend_rows"></div>
+      </div>
+      <!-- Круговой датчик Recovery (span 1) -->
+      <div class="card gauge-card">
+        <div class="card-head"><h2>Recovery</h2></div>
+        <div class="gauge-wrap" id="c_gauge"></div>
+      </div>
+      <!-- Архитектура сна (span 3, во всю ширину) -->
+      <div class="card bento-3">
+        <div class="card-head"><h2>Sleep architecture</h2><span class="tag" id="sleep_tag"></span></div>
+        <div id="c_sleep_tl"></div>
+        <!-- история стадий по всем ночам: глубокий стабилен, ночь ломается за счёт REM/длительности -->
+        <div id="c_sleep_hist" style="margin-top:24px"></div>
+      </div>
+      <!-- Дополнительный ряд метрик со спарклайнами (span 1 каждая) -->
+      <div class="card mini-card" id="mini_rhr"></div>
+      <div class="card mini-card" id="mini_load"></div>
+      <div class="card mini-card" id="mini_recweek"></div>
+    </div>
+  </section>
+
+  <!-- ========== АНАЛИТИКА ========== -->
+  <section class="panel" data-panel="analytics" id="panel-analytics" role="tabpanel" hidden>
+    <div class="panel-intro">
+      <h1>Trends</h1>
+      <p>Recovery, sleep, and load trends focused on durable change rather than isolated fluctuations.</p>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <h2>Daily Recovery</h2>
+        <div class="seg" data-chart="recovery">
+          <button data-val="7">Week</button>
+          <button data-val="14">2 weeks</button>
+          <button data-val="30" class="on">Month</button>
+        </div>
+      </div>
+      <p class="desc">High zone ≥67, moderate 34–66, low &lt;34. The dashed line shows the linear trend.</p>
+      <div class="chart" id="c_recovery"></div>
+    </div>
+    <div class="cols2">
+      <div class="card">
+        <div class="card-head">
+          <h2>Activity volume</h2>
+          <div class="seg" data-chart="weekly">
+            <button data-val="load" class="on">Σ strain</button>
+            <button data-val="dur_h">Hours</button>
+            <button data-val="count">Sessions</button>
+            <button data-val="sports">By activity</button>
+          </div>
+        </div>
+        <p class="desc" id="c_weekly_desc">Weekly load volume. Switch to “By activity” to see strain by activity type.</p>
+        <div class="chart" id="c_weekly"></div>
+      </div>
+      <div class="card">
+        <h2>Factor relationships</h2>
+        <p class="desc">Nightly sleep duration compared with next-morning Recovery.</p>
+        <div class="chart" id="c_sleep"></div>
+        <div class="trend-connections-other">
+          <p class="trend-connections-label">Other relationships</p>
+          <div class="trend-connections-row" data-metric="rec-load" tabindex="0" role="button" aria-haspopup="dialog" aria-label="Recovery and same-day load — open detailed chart">
+            <span class="trend-connections-title">Recovery ↔ same-day load</span>
+            <span class="trend-connections-bar"><i id="c_load_corr_bar"></i></span>
+            <span class="trend-connections-r" id="c_load_corr_r">r = —</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Daily load by Recovery</h2>
+      <p class="desc">Tall red and amber bars mark heavy training on low-Recovery days.</p>
+      <div class="chart" id="c_load"></div>
+    </div>
+  </section>
+
+  <!-- ========== ИНСАЙТЫ ========== -->
+  <section class="panel" data-panel="insights" id="panel-insights" role="tabpanel" hidden>
+    <div class="panel-intro">
+      <h1>Factors</h1>
+      <p>Recovery patterns, weekly rhythm, and observed relationships between sleep, load, and readiness.</p>
+    </div>
+    <div class="card" id="hm_card">
+      <div class="card-head">
+        <h2>Recovery calendar</h2>
+        <!-- динамический статус подсветки: пуст по умолчанию, текст появляется
+             в момент взаимодействия (text swap из transitions-dev) -->
+        <span class="tag t-text-swap" id="hm_hint" hidden></span>
+      </div>
+      <div id="c_heatmap"></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Weekly rhythm</h2><span class="tag" id="dow_tag"></span></div>
+      <p class="desc">Average Recovery by weekday; the narrow orange bar shows average daily load on its own scale.</p>
+      <div class="chart" id="c_dow"></div>
+    </div>
+    <div class="insights" id="insights"></div>
+    <!-- Полный отчёт по образу жизни живёт в detail sheet; на холсте — только
+         карточка-резюме. Списки «дней для решения» переехали внутрь
+         evidence-карточек (см. fillInsights), отдельной секции больше нет. -->
+    <div class="card" id="ls_card">
+      <div class="card-head"><h2>Lifestyle · full report</h2><span class="tag" id="ls_gen"></span></div>
+      <p class="desc" id="ls_summary"></p>
+    </div>
+  </section>
+
+  <!-- ========== ТРЕНИРОВКИ ========== -->
+  <section class="panel" data-panel="workouts" id="panel-workouts" role="tabpanel" hidden>
+    <div class="panel-intro">
+      <h1>Activity</h1>
+      <p>WHOOP activities, strength logs, cardio, and supplements in one verifiable history.</p>
+    </div>
+    <div class="card">
+      <h2>Strength training · Telegram</h2>
+      <p class="desc">Exercise, working-weight, and volume history by day.</p>
+      <div id="manual_workouts_container" class="ls-md"></div>
+    </div>
+    <div class="card">
+      <h2>Cardio training · Telegram / screenshots</h2>
+      <p class="desc">Aerobic training history: running, walking, cycling, and more.</p>
+      <div id="cardio_exercises_container" class="ls-md"></div>
+    </div>
+    <div class="card">
+      <h2>Supplements · Telegram</h2>
+      <p class="desc">Creatine and supplement history by day.</p>
+      <div id="supplements_log_container" class="ls-md"></div>
+    </div>
+    <!-- Прогрессия: перенесена из Динамики (там дублировала «топ-3 активности» без
+         контекста рекордов); JS переставляет карточку сразу после «Нагрузка и
+         источники» (см. structureActivity). -->
+    <div class="card" id="progress_card">
+      <div class="card-head"><h2>Progression</h2></div>
+      <p class="desc">Strain progression for the three leading activities. The line is a smoothed trend.</p>
+      <div class="small-mult" id="c_progress"></div>
+    </div>
+    <!-- «Полная таблица» удалена — те же 6 полей уже есть в rank_records;
+         клик по строке раскрывает дату рекорда (см. rankRecords). -->
+    <div class="card">
+      <h2>Personal records by activity</h2>
+      <p class="desc">Ranked by peak strain. Select a row to reveal the record date.</p>
+      <ol class="rank-list" id="rank_records"></ol>
+    </div>
+  </section>
+
+  <div class="foot" id="foot"></div>
+</main>
+</div><!-- /.shell -->
+<div id="tt"></div>
+
+<script>
+const DATA = /*__DATA__*/{};
+const $ = s => document.querySelector(s);
+const SVGNS="http://www.w3.org/2000/svg";
+// Токены темы читаются из :root ОДИН раз при загрузке (тема статична):
+// раньше каждый вызов cvar() дёргал getComputedStyle — сотни раз за рендер.
+const THEME=(()=>{
+  const cs=getComputedStyle(document.body),o={};
+  ['--accent','--accent-2','--accent-3','--accent-lime','--good','--warn','--crit',
+   '--muted','--slate','--ink','--ink-2','--surface','--surface-2','--border','--trend-line',
+   '--sleep-awake','--sleep-core','--sleep-deep','--sleep-rem',
+   '--cat-5','--cat-6','--cat-7','--cat-8']
+    .forEach(n=>o[n]=cs.getPropertyValue(n).trim());
+  return o;
+})();
+const cvar = n => THEME[n];
+// Категориальная палитра (Obsidian): акцентная лесенка системы Stitch —
+// оранжевый / лайм / голубой / фиолетовый + приглушённые оттенки-производные.
+const palette = () => [cvar('--accent'),cvar('--accent-lime'),cvar('--accent-2'),cvar('--accent-3'),
+                       cvar('--cat-5'),cvar('--cat-6'),cvar('--cat-7'),cvar('--cat-8')];
+const fmt = (n,d=1)=> (n==null?'—':Number(n).toLocaleString('en-US',{maximumFractionDigits:d}));
+const escHTML = value => String(value ?? '').replace(/[&<>"']/g, ch => ({
+  '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+}[ch]));
+const EN_MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const md = ds=>{const p=ds.split('-');return EN_MON[+p[1]-1]+' '+(+p[2]);};
+// ---- transitions-dev: оркестрация number pop-in и text swap ----
+// число → набор .t-digit для pop-in: каждая цифра въезжает снизу с блюром,
+// последние два знака идут с каскадной задержкой (data-stagger 1/2)
+function popNum(str){
+  str=String(str);
+  if(!str||str==='—')return str;
+  const ch=str.split(''),n=ch.length;
+  return `<span class="t-digit-group is-animating">${ch.map((c,i)=>
+    `<span class="t-digit"${i===n-2?' data-stagger="1"':i===n-1?' data-stagger="2"':''}>${c}</span>`).join('')}</span>`;
+}
+// трёхфазная смена текста «на месте»: старый уходит вверх с блюром, новый входит
+// снизу; длительность читается из --text-swap-dur, чтобы CSS и JS не разъехались.
+// Пустая строка прячет элемент (у .tag есть рамка-пилюля, пустой он не нужен).
+const TSWAP_MS=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--text-swap-dur'))||200;
+function swapText(el,next){
+  if(!el)return;
+  if(matchMedia('(prefers-reduced-motion:reduce)').matches){el.textContent=next;el.hidden=!next;return;}
+  el.classList.add('is-exit');
+  setTimeout(()=>{
+    el.textContent=next;el.hidden=!next;
+    el.classList.remove('is-exit');el.classList.add('is-enter-start');
+    void el.offsetHeight; // reflow — без него вход не проиграется
+    el.classList.remove('is-enter-start');
+  },TSWAP_MS);
+}
+
+// ---------- tooltip ----------
+const tt=$('#tt');
+function showTT(html,e){tt.innerHTML=html;tt.style.opacity=1;moveTT(e);}
+function moveTT(e){let x=e.clientX+14,y=e.clientY+14;
+  const r=tt.getBoundingClientRect();
+  if(x+r.width>innerWidth-8)x=e.clientX-r.width-14;
+  if(y+r.height>innerHeight-8)y=e.clientY-r.height-14;
+  tt.style.left=x+'px';tt.style.top=y+'px';}
+function hideTT(){tt.style.opacity=0;}
+
+// ---------- svg helpers ----------
+function el(tag,attrs,parent){const n=document.createElementNS(SVGNS,tag);
+  for(const k in attrs)n.setAttribute(k,attrs[k]);if(parent)parent.appendChild(n);return n;}
+function mkSVG(w,h){const s=el('svg',{viewBox:`0 0 ${w} ${h}`,width:w,height:h,'font-family':'inherit'});return s;}
+function linReg(pts){ // pts:[[x,y]] -> {m,b}
+  const n=pts.length;if(n<2)return null;
+  let sx=0,sy=0,sxy=0,sxx=0;for(const[x,y]of pts){sx+=x;sy+=y;sxy+=x*y;sxx+=x*x;}
+  const m=(n*sxy-sx*sy)/(n*sxx-sx*sx||1);const b=(sy-m*sx)/n;return{m,b};}
+// корреляция Пирсона для аннотаций, считаемых на клиенте из DATA
+function pearsonJS(pairs){
+  const p=pairs.filter(q=>q[0]!=null&&q[1]!=null);
+  if(p.length<4)return null;
+  const mx=p.reduce((a,q)=>a+q[0],0)/p.length,my=p.reduce((a,q)=>a+q[1],0)/p.length;
+  let num=0,dx=0,dy=0;
+  p.forEach(([a,b])=>{num+=(a-mx)*(b-my);dx+=(a-mx)**2;dy+=(b-my)**2;});
+  const den=Math.sqrt(dx*dy);
+  return den?num/den:0;
+}
+const meanOf=vs=>{const v=vs.filter(x=>x!=null);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;};
+
+// ---------- Overview calculation helpers ----------
+// Pure data helpers for the Overview information architecture.
+function overviewIsFiniteNumber(value){
+  return typeof value==='number'&&Number.isFinite(value);
+}
+
+function overviewDaysInMonth(year,month){
+  if(month===2)return year%4===0&&(year%100!==0||year%400===0)?29:28;
+  return [4,6,9,11].includes(month)?30:31;
+}
+
+function overviewLocalDateParts(dateKey){
+  if(typeof dateKey!=='string')return null;
+  const match=/^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey);
+  if(!match)return null;
+  const year=Number(match[1]),month=Number(match[2]),day=Number(match[3]);
+  if(month<1||month>12||day<1||day>overviewDaysInMonth(year,month))return null;
+  return {year,month,day};
+}
+
+function overviewLocalDateKey(parts){
+  return String(parts.year).padStart(4,'0')+'-'+String(parts.month).padStart(2,'0')+'-'+
+    String(parts.day).padStart(2,'0');
+}
+
+function overviewShiftLocalDate(dateKey,offsetDays){
+  const parts=overviewLocalDateParts(dateKey);
+  if(!parts||!Number.isInteger(offsetDays))return null;
+  let {year,month,day}=parts;
+  const direction=Math.sign(offsetDays);
+  for(let left=Math.abs(offsetDays);left>0;left--){
+    day+=direction;
+    if(direction>0&&day>overviewDaysInMonth(year,month)){
+      day=1;month+=1;
+      if(month>12){month=1;year+=1;}
+    }else if(direction<0&&day<1){
+      month-=1;
+      if(month<1){month=12;year-=1;}
+      day=overviewDaysInMonth(year,month);
+    }
+  }
+  return overviewLocalDateKey({year,month,day});
+}
+
+function overviewPreviousLocalDate(dateKey){
+  return overviewShiftLocalDate(dateKey,-1);
+}
+
+function overviewRecoveryReference(days){
+  if(!Array.isArray(days))return null;
+  return days.reduce((latest,row)=>{
+    if(!row||!overviewLocalDateParts(row.date)||!overviewIsFiniteNumber(row.recovery))return latest;
+    return !latest||row.date>latest.date?row:latest;
+  },null);
+}
+
+function overviewFindDay(days,dateKey){
+  if(!Array.isArray(days)||!overviewLocalDateParts(dateKey))return null;
+  return days.find(row=>row&&row.date===dateKey)||null;
+}
+
+function overviewLastValidMetricSamples(days,metric,count,{throughDate=null,excludeDate=null}={}){
+  if(!Array.isArray(days)||typeof metric!=='string'||!Number.isInteger(count)||count<0)return [];
+  if(throughDate!==null&&!overviewLocalDateParts(throughDate))return [];
+  return days
+    .filter(row=>row&&overviewLocalDateParts(row.date)&&overviewIsFiniteNumber(row[metric])&&
+      (throughDate===null||row.date<=throughDate)&&row.date!==excludeDate)
+    .sort((a,b)=>a.date.localeCompare(b.date))
+    .slice(-count)
+    .map(row=>({date:row.date,value:row[metric],row}));
+}
+
+function overviewMean(values){
+  if(!Array.isArray(values))return null;
+  const valid=values.filter(overviewIsFiniteNumber);
+  return valid.length?valid.reduce((sum,value)=>sum+value,0)/valid.length:null;
+}
+
+function overviewAbsoluteDelta(current,baseline){
+  return overviewIsFiniteNumber(current)&&overviewIsFiniteNumber(baseline)?current-baseline:null;
+}
+
+function overviewPercentageDelta(current,baseline){
+  return overviewIsFiniteNumber(current)&&overviewIsFiniteNumber(baseline)&&baseline!==0
+    ?(current-baseline)/Math.abs(baseline)*100:null;
+}
+
+function overviewCalendarWindow(days,referenceDate,startOffset,endOffset){
+  const validReference=overviewLocalDateParts(referenceDate);
+  const validOffsets=Number.isInteger(startOffset)&&Number.isInteger(endOffset)&&startOffset<=endOffset;
+  if(!validReference||!validOffsets){
+    return {valid:false,referenceDate,dates:[],entries:[],expected:0,coverage:0,complete:false};
+  }
+  const byDate=new Map();
+  if(Array.isArray(days))days.forEach(row=>{
+    if(row&&overviewLocalDateParts(row.date))byDate.set(row.date,row);
+  });
+  const dates=[];
+  for(let offset=startOffset;offset<=endOffset;offset++){
+    dates.push(overviewShiftLocalDate(referenceDate,offset));
+  }
+  const entries=dates.map(date=>({date,row:byDate.get(date)||null,present:byDate.has(date)}));
+  const coverage=entries.reduce((count,entry)=>count+(entry.present?1:0),0);
+  return {valid:true,referenceDate,dates,entries,expected:entries.length,coverage,
+    complete:coverage===entries.length};
+}
+
+function overviewRecoveryWindows(days,referenceDate,size=7){
+  if(!overviewLocalDateParts(referenceDate)||!Number.isInteger(size)||size<1)return null;
+  const samples=overviewLastValidMetricSamples(days,'recovery',size*2,{throughDate:referenceDate});
+  const currentSamples=samples.slice(-size);
+  const previousSamples=samples.slice(Math.max(0,samples.length-size*2),Math.max(0,samples.length-size));
+  const summarize=windowSamples=>{
+    const mean=overviewMean(windowSamples.map(sample=>sample.value));
+    return {samples:windowSamples,mean,sampleSize:windowSamples.length,
+      sufficient:windowSamples.length===size};
+  };
+  const current=summarize(currentSamples),previous=summarize(previousSamples);
+  return {current,previous,comparison:{
+    absolute:current.sufficient&&previous.sufficient
+      ?overviewAbsoluteDelta(current.mean,previous.mean):null,
+    percentage:current.sufficient&&previous.sufficient
+      ?overviewPercentageDelta(current.mean,previous.mean):null
+  }};
+}
+
+function overviewPreviousDayLoad(days,referenceDate){
+  const date=overviewPreviousLocalDate(referenceDate);
+  if(!date)return {date:null,row:null,present:false,hasValue:false,value:null};
+  const row=overviewFindDay(days,date);
+  const hasValue=!!row&&overviewIsFiniteNumber(row.load);
+  return {date,row,present:!!row,hasValue,value:hasValue?row.load:null};
+}
+
+function overviewSummarizeMetricWindow(window,metric){
+  const values=window.valid?window.entries.map(entry=>entry.row&&entry.row[metric]):[];
+  const validValues=values.filter(overviewIsFiniteNumber);
+  const valueCoverage=validValues.length;
+  const sufficient=window.valid&&window.complete&&valueCoverage===window.expected;
+  return {...window,valueCoverage,sufficient,
+    sum:sufficient?validValues.reduce((total,value)=>total+value,0):null};
+}
+
+function overviewLoadWindows(days,referenceDate){
+  const current=overviewSummarizeMetricWindow(
+    overviewCalendarWindow(days,referenceDate,-7,-1),'load');
+  const previous=overviewSummarizeMetricWindow(
+    overviewCalendarWindow(days,referenceDate,-14,-8),'load');
+  return {current,previous,comparison:{
+    absolute:current.sufficient&&previous.sufficient
+      ?overviewAbsoluteDelta(current.sum,previous.sum):null,
+    percentage:current.sufficient&&previous.sufficient
+      ?overviewPercentageDelta(current.sum,previous.sum):null
+  }};
+}
+
+function overviewActiveDays(days,referenceDate,startOffset=-7,endOffset=-1){
+  const window=overviewCalendarWindow(days,referenceDate,startOffset,endOffset);
+  const counts=window.valid?window.entries.map(entry=>entry.row&&entry.row.workout_count):[];
+  const validCounts=counts.filter(value=>overviewIsFiniteNumber(value)&&value>=0);
+  const valueCoverage=validCounts.length;
+  const sufficient=window.valid&&window.complete&&valueCoverage===window.expected;
+  return {...window,valueCoverage,sufficient,
+    activeDays:sufficient?validCounts.filter(value=>value>0).length:null,
+    workoutCount:sufficient?validCounts.reduce((total,value)=>total+value,0):null};
+}
+
+function overviewIsNapRecord(night){
+  if(!night||typeof night!=='object')return false;
+  const flag=['is_nap','nap'].find(key=>Object.prototype.hasOwnProperty.call(night,key));
+  if(flag){
+    return night[flag]===true||night[flag]===1||String(night[flag]).toLowerCase()==='true';
+  }
+  const type=[night.sleep_type,night.type].find(value=>typeof value==='string');
+  return type?type.toLowerCase().includes('nap'):false;
+}
+
+function overviewBedtimeMinutes(night){
+  if(!night||typeof night!=='object')return null;
+  const raw=[night.bed_local,night.bed_time,night.bedtime].find(value=>typeof value==='string');
+  if(!raw)return null;
+  const match=/(?:T|\s)(\d{2}):(\d{2})(?::\d{2})?(?:[.,]\d+)?(?:[+-]\d{2}:?\d{2}|Z)?$/.exec(raw)||
+    /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(raw);
+  if(!match)return null;
+  const hour=Number(match[1]),minute=Number(match[2]);
+  if(hour>23||minute>59)return null;
+  const minutes=hour*60+minute;
+  return minutes<12*60?minutes+24*60:minutes;
+}
+
+function overviewSleepConsistency(nights,referenceDate,{startOffset=-6,endOffset=0,minSamples=4}={}){
+  const validConfig=overviewLocalDateParts(referenceDate)&&Number.isInteger(startOffset)&&
+    Number.isInteger(endOffset)&&startOffset<=endOffset&&endOffset-startOffset+1<=7&&
+    Number.isInteger(minSamples)&&minSamples>0;
+  if(!validConfig){
+    return {valid:false,minutes:null,sampleSize:0,sufficient:false,samples:[]};
+  }
+  const allowedDates=new Set();
+  for(let offset=startOffset;offset<=endOffset;offset++){
+    allowedDates.add(overviewShiftLocalDate(referenceDate,offset));
+  }
+  const byDate=new Map();
+  if(Array.isArray(nights))nights.forEach(night=>{
+    if(!night||!allowedDates.has(night.date)||overviewIsNapRecord(night))return;
+    const minutes=overviewBedtimeMinutes(night);
+    if(overviewIsFiniteNumber(minutes)&&!byDate.has(night.date)){
+      byDate.set(night.date,{date:night.date,minutes,night});
+    }
+  });
+  const samples=[...byDate.values()].sort((a,b)=>a.date.localeCompare(b.date));
+  const mean=overviewMean(samples.map(sample=>sample.minutes));
+  const deviation=mean===null?null
+    :Math.sqrt(overviewMean(samples.map(sample=>(sample.minutes-mean)**2)));
+  const sufficient=samples.length>=minSamples;
+  return {valid:true,minutes:sufficient?Math.round(deviation):null,
+    sampleSize:samples.length,sufficient,samples};
+}
+
+function zoneColor(r){if(r==null)return cvar('--muted');if(r>=67)return cvar('--good');if(r>=34)return cvar('--warn');return cvar('--crit');}
+function zoneName(r){if(r==null)return '—';if(r>=67)return 'high';if(r>=34)return 'moderate';return 'low';}
+
+// ---------- общие примитивы графиков ----------
+// Каждый график раньше копипастил сетку/оси/подписи/тултипы; новые графики
+// собираются из этих кирпичей: geo = {svg,W,mL,mR,mT,ih}.
+function bindTip(node,html,{focusable=false}={}){ // html: готовая строка (или функция для ленивой сборки)
+  let hasFocus=false;
+  const reveal=e=>showTT(typeof html==='function'?html():html,e);
+  const revealAtCenter=()=>{const r=node.getBoundingClientRect();reveal({clientX:r.left+r.width/2,clientY:r.top+r.height/2});};
+  const hide=()=>{if(!hasFocus)hideTT();};
+  node.addEventListener('mouseenter',reveal);
+  node.addEventListener('mousemove',reveal);
+  node.addEventListener('pointerdown',reveal);
+  node.addEventListener('pointerleave',hide);
+  if(focusable){
+    node.setAttribute('tabindex','0');
+    node.setAttribute('role','img');
+    node.addEventListener('focus',()=>{hasFocus=true;revealAtCenter();});
+    node.addEventListener('blur',()=>{hasFocus=false;hideTT();});
+    node.addEventListener('click',revealAtCenter);
+  }
+}
+// горизонтальная сетка + подписи по Y от min до max
+function gridY(geo,{min=0,max,ticks=5,fmtV}){
+  const f=fmtV||(v=>Math.round(v));
+  for(let i=0;i<=ticks;i++){
+    const v=min+(max-min)*i/ticks,y=geo.mT+geo.ih-geo.ih*i/ticks;
+    el('line',{x1:geo.mL,x2:geo.W-geo.mR,y1:y,y2:y,class:'grid-line'},geo.svg);
+    el('text',{x:geo.mL-8,y:y+4,'text-anchor':'end',class:'axlbl tab'},geo.svg).textContent=f(v);
+  }
+}
+// оси: всегда Y-baseline, опционально X-baseline
+function axisLines(geo,both){
+  el('line',{x1:geo.mL,x2:geo.mL,y1:geo.mT,y2:geo.mT+geo.ih,class:'baseline'},geo.svg);
+  if(both)el('line',{x1:geo.mL,x2:geo.W-geo.mR,y1:geo.mT+geo.ih,y2:geo.mT+geo.ih,class:'baseline'},geo.svg);
+}
+// подписи дат по X «каждая every-я + последняя»; item — объект с .date или сама строка
+function xDateLabels(geo,items,X,every=4){
+  // последняя подпись всегда прижата к правому краю (не 'middle') так, чтобы не
+  // съезжать за холст; если последняя регулярная отметка (i%every===0) оказалась
+  // бы ближе минимального зазора в пикселях — она пропускается, а не рисуется
+  // поверх. Порог в пикселях (не в индексах), потому что плотность точек сильно
+  // различается между чартами (30 значений на 700px vs 35 значений на 830px).
+  const lastIdx=items.length-1;
+  const lastRegular=Math.floor(lastIdx/every)*every;
+  const MIN_LABEL_GAP=46;
+  const skipRegular=lastRegular!==lastIdx && Math.abs(X(lastIdx)-X(lastRegular))<MIN_LABEL_GAP;
+  items.forEach((x,i)=>{
+    if(i===lastIdx){
+      el('text',{x:X(i),y:geo.mT+geo.ih+18,'text-anchor':'end',class:'axlbl'},geo.svg).textContent=md(x.date||x);
+      return;
+    }
+    if(i%every===0&&!(skipRegular&&i===lastRegular))
+      el('text',{x:X(i),y:geo.mT+geo.ih+18,'text-anchor':'middle',class:'axlbl'},geo.svg).textContent=md(x.date||x);
+  });
+}
+// пунктирная линия тренда
+function trendDash(geo,[x1,y1,x2,y2],{color,width=2,dash='6 5',opacity=.9}={}){
+  el('line',{x1,y1,x2,y2,stroke:color||cvar('--trend-line'),'stroke-width':width,
+    'stroke-dasharray':dash,'stroke-linecap':'round',opacity},geo.svg);
+}
+
+// ============ 1a. WEEKLY BARS (metric: load | dur_h | count | sports) ============
+// Re-materialized to the State chart language: bars sit at ~70% tonal opacity so
+// the series reads as a quiet trend, and only the current (last) week is full
+// brightness — the one data point that matters for "where am I now".
+let weeklyMetric='load';
+function chartWeekly(){
+  const box=$('#c_weekly');box.innerHTML='';
+  const desc=$('#c_weekly_desc');
+  if(weeklyMetric==='sports'){
+    if(desc)desc.textContent='Total strain by activity type for the selected period.';
+    chartSports(box);
+    return;
+  }
+  if(desc)desc.textContent='Weekly load volume. Switch to “By activity” to see strain by activity type.';
+  const d=DATA.weekly;
+  const key=weeklyMetric;
+  const lbl={load:'Σ strain',dur_h:'Hours',count:'Sessions'}[key];
+  const fv=v=>key==='count'?fmt(v,0):fmt(v,1);
+  const W=Math.max(500,d.length*96+90),H=290,mL=42,mR=14,mT=16,mB=60;
+  const iw=W-mL-mR,ih=H-mT-mB;
+  const maxV=Math.max(...d.map(x=>x[key]),1)*1.14;
+  const svg=mkSVG(W,H);box.appendChild(svg);
+  const geo={svg,W,mL,mR,mT,ih};
+  gridY(geo,{max:maxV});
+  axisLines(geo);
+  const bw=iw/d.length, bar=Math.min(54,bw*0.56);
+  const accent=cvar('--accent');
+  d.forEach((x,i)=>{
+    const cx=mL+bw*i+bw/2;
+    const h=ih*x[key]/maxV; const y=mT+ih-h;
+    const isCurrent=i===d.length-1;
+    const r=el('rect',{x:cx-bar/2,y,width:bar,height:Math.max(2,h),rx:5,
+      fill:isCurrent?accent:`color-mix(in srgb, ${accent} 62%, transparent)`,class:'hoverable'},svg);
+    bindTip(r,`<div class="tth">Week of ${md(x.week_start)}</div>
+      <div class="ttr">Load: <b>${fmt(x.load)}</b></div>
+      <div class="ttr">Activities: ${x.count}</div>
+      <div class="ttr">Hours: ${fmt(x.dur_h)}</div>
+      <div class="ttr">Average Recovery: ${x.avg_recovery??'—'}</div>`);
+    el('text',{x:cx,y:y-7,'text-anchor':'middle',class:'axlbl tab',fill:isCurrent?cvar('--ink'):cvar('--slate'),'font-weight':isCurrent?700:500},svg).textContent=fv(x[key]);
+    el('text',{x:cx,y:mT+ih+18,'text-anchor':'middle',class:'axlbl'},svg).textContent=md(x.week_start);
+  });
+  el('text',{x:12,y:mT+ih/2,'text-anchor':'middle',class:'axlbl',transform:`rotate(-90 12 ${mT+ih/2})`},svg).textContent=lbl;
+}
+
+// ============ 1b. SPORT BARS (horizontal) — now a segment of "Объём" ============
+// Category hue stays legible (the color IS the semantic content, it names the
+// sport), but overall fill is toned down from a flat 100%-saturation block.
+function chartSports(box){
+  box=box||$('#c_weekly');box.innerHTML='';
+  const d=DATA.sports;
+  const pal=palette();
+  const rowH=42,H=d.length*rowH+30,mL=130,mR=90,W=Math.max(560,760);
+  const iw=W-mL-mR;
+  const maxV=Math.max(...d.map(x=>x.total_strain));
+  const svg=mkSVG(W,H);box.appendChild(svg);
+  d.forEach((x,i)=>{
+    const y=15+i*rowH;
+    el('text',{x:mL-12,y:y+rowH/2-2,'text-anchor':'end',class:'axlbl',fill:cvar('--ink'),'font-size':13.5,'font-weight':600},svg).textContent=x.sport;
+    const w=iw*x.total_strain/maxV;
+    const r=el('rect',{x:mL,y:y+6,width:Math.max(2,w),height:rowH-20,rx:4,
+      fill:`color-mix(in srgb, ${pal[i%pal.length]} 80%, transparent)`,class:'hoverable'},svg);
+    bindTip(r,`<div class="tth">${escHTML(x.sport)}</div>
+      <div class="ttr">Activities: <b>${x.n}</b></div>
+      <div class="ttr">Σ strain: <b>${fmt(x.total_strain)}</b></div>
+      <div class="ttr">Average strain: ${fmt(x.avg_strain)}</div>
+      <div class="ttr">Hours: ${fmt(x.total_dur_h)}</div>
+      <div class="ttr">Average heart rate: ${x.avg_hr??'—'}</div>`);
+    el('text',{x:mL+w+8,y:y+rowH/2-1,class:'axlbl tab',fill:cvar('--ink-2'),'font-weight':600},svg).textContent=fmt(x.total_strain)+' ('+x.n+')';
+  });
+}
+
+// ============ 2a. RECOVERY LINE (window: recoveryRange last days) ============
+// Re-materialized to the State chart language: thin line (no glow, no gradient
+// area-fill), quiet zone bands with dim borders, small per-day zone-colored
+// dots, and a ring+core "current value" marker on the last point — the same
+// vocabulary as the State-screen sparklines, just longer.
+let recoveryRange=30;
+function chartRecovery(){
+  const box=$('#c_recovery');box.innerHTML='';
+  const all=(recoveryRange==='all')?DATA.days:DATA.days.slice(-recoveryRange);
+  const d=all.filter(x=>x.recovery!=null);
+  const W=Math.max(620,all.length*24+80),H=310,mL=40,mR=16,mT=14,mB=54;
+  const iw=W-mL-mR,ih=H-mT-mB;
+  const n=all.length;
+  const X=i=>mL+iw*i/(n-1);
+  const Y=v=>mT+ih-ih*v/100;
+  const svg=mkSVG(W,H);box.appendChild(svg);
+
+  // текущая (последняя известная) зона задаёт акцентный цвет линии и current-маркера
+  const lastKnown=[...d].reverse()[0];
+  const curColor=lastKnown?zoneColor(lastKnown.recovery):cvar('--accent');
+
+  // --- тональные полосы зон — тихий фон, не разметка трека ---
+  // Lime/red are highly saturated accent colors, so even a "quiet" opacity
+  // reads brighter than a muted hue at the same alpha — kept low accordingly.
+  const zoneBands=[[67,100,'--good',0.05],[34,67,'--warn',0.045],[0,34,'--crit',0.055]];
+  zoneBands.forEach(([lo,hi,c,op])=>{
+    el('rect',{x:mL,y:Y(hi),width:iw,height:Y(lo)-Y(hi),fill:cvar(c),opacity:op},svg);
+  });
+  // едва заметные границы полос — не насыщенная разметка
+  [67,34].forEach(v=>{el('line',{x1:mL,x2:W-mR,y1:Y(v),y2:Y(v),
+    stroke:cvar(v===67?'--good':'--crit'),'stroke-width':1,opacity:0.14},svg);});
+
+  const geo={svg,W,mL,mR,mT,ih};
+  gridY(geo,{max:100,ticks:4});
+  axisLines(geo);
+
+  // index map for x by date
+  const idx={};all.forEach((x,i)=>idx[x.date]=i);
+
+  // --- тренд-линия: тоньше основной, отчётливо другой (холодный) оттенок ---
+  const pts=d.map(x=>[idx[x.date],x.recovery]);const reg=linReg(pts);
+  if(reg)trendDash(geo,[X(0),Y(reg.b),X(n-1),Y(reg.m*(n-1)+reg.b)]);
+
+  // --- основная линия recovery: тонкая, без свечения и area-заливки ---
+  let dpath='';d.forEach((x,i)=>{const px=X(idx[x.date]),py=Y(x.recovery);dpath+=(i?'L':'M')+px+' '+py+' ';});
+  el('path',{d:dpath,fill:'none',stroke:curColor,'stroke-width':1.6,
+    'stroke-linejoin':'round','stroke-linecap':'round',opacity:0.82},svg);
+
+  // --- точки: малые, зона = цвет, без белой обводки; курсор увеличивает через CSS ---
+  d.forEach((x,i)=>{const px=X(idx[x.date]),py=Y(x.recovery);
+    if(i===d.length-1)return; // последняя точка получает отдельный current-маркер ниже
+    const c=el('circle',{cx:px,cy:py,r:3,fill:zoneColor(x.recovery),opacity:.85,class:'hoverable'},svg);
+    bindTip(c,`<div class="tth">${md(x.date)} · ${x.dow}</div>
+      <div class="ttr">Recovery: <b>${x.recovery}</b> (${zoneName(x.recovery)})</div>
+      <div class="ttr">HRV: ${x.hrv??'—'} ms · resting HR: ${x.resting_hr??'—'}</div>
+      <div class="ttr">Sleep: ${x.sleep_h!=null?fmt(x.sleep_h)+' h':'—'}</div>
+      <div class="ttr">Load: ${fmt(x.load)}</div>`);
+  });
+  if(d.length){
+    const last=d[d.length-1],px=X(idx[last.date]),py=Y(last.recovery);
+    el('circle',{cx:px,cy:py,r:6,fill:'none',stroke:curColor,'stroke-width':1.4},svg);
+    const cur=el('circle',{cx:px,cy:py,r:2.6,fill:curColor,class:'hoverable'},svg);
+    bindTip(cur,`<div class="tth">${md(last.date)} · ${last.dow}</div>
+      <div class="ttr">Recovery: <b>${last.recovery}</b> (${zoneName(last.recovery)})</div>
+      <div class="ttr">HRV: ${last.hrv??'—'} ms · resting HR: ${last.resting_hr??'—'}</div>
+      <div class="ttr">Sleep: ${last.sleep_h!=null?fmt(last.sleep_h)+' h':'—'}</div>
+      <div class="ttr">Load: ${fmt(last.load)}</div>`);
+  }
+
+  xDateLabels(geo,all,X,4);
+  if(reg){const dir=reg.m>0.15?'rising':reg.m<-0.15?'falling':'stable';
+    el('text',{x:W-mR,y:mT+10,'text-anchor':'end',class:'axlbl',fill:cvar('--trend-line'),'font-weight':600},svg).textContent='trend: '+dir;}
+}
+
+// ============ 2b. DAILY LOAD BARS (color by recovery) ============
+function chartLoad(){
+  const box=$('#c_load');box.innerHTML='';
+  const d=DATA.days;
+  const W=Math.max(620,d.length*24+80),H=300,mL=40,mR=16,mT=16,mB=54;
+  const iw=W-mL-mR,ih=H-mT-mB;
+  const maxV=Math.max(...d.map(x=>x.load))*1.1;
+  const bw=iw/d.length,bar=Math.min(16,bw*0.66);
+  const svg=mkSVG(W,H);box.appendChild(svg);
+  const geo={svg,W,mL,mR,mT,ih};
+  gridY(geo,{max:maxV});
+  axisLines(geo);
+  d.forEach((x,i)=>{const cx=mL+bw*i+bw/2;
+    if(x.load>0){const h=ih*x.load/maxV,y=mT+ih-h;
+      const r=el('rect',{x:cx-bar/2,y,width:bar,height:Math.max(2,h),rx:3,
+        fill:`color-mix(in srgb, ${zoneColor(x.recovery)} 78%, transparent)`,class:'hoverable'},svg);
+      bindTip(r,`<div class="tth">${md(x.date)} · ${x.dow}</div>
+        <div class="ttr">Load: <b>${fmt(x.load)}</b></div>
+        <div class="ttr">Recovery: ${x.recovery??'—'} (${zoneName(x.recovery)})</div>
+        <div class="ttr">Activities: ${x.workout_count} · ${fmt(x.duration_min,0)} min</div>
+        <div class="ttr">${x.sports.map(escHTML).join(', ')||''}</div>`);}
+  });
+  xDateLabels(geo,d,i=>mL+bw*i+bw/2,4);
+  // legend
+  const lg=document.createElement('div');lg.className='legend';
+  lg.innerHTML=`<span class="it"><span class="sw" style="background:var(--good)"></span>high Recovery (≥67)</span>
+    <span class="it"><span class="sw" style="background:var(--warn)"></span>moderate (34–66)</span>
+    <span class="it"><span class="sw" style="background:var(--crit)"></span>low (&lt;34)</span>`;
+  box.appendChild(lg);
+}
+
+// ============ 2c. SCATTER recovery vs load — sheet-only (see chartConnections) ============
+// The weaker correlation (r≈0.06) no longer sits on the canvas as its own card;
+// it renders only inside the detail sheet, opened from the compact row wired up
+// in chartConnections(). `box` is supplied by openSheet/registerExpand.
+function chartScatter(box){
+  box.innerHTML='';
+  const d=DATA.days.filter(x=>x.workout_count>0&&x.recovery!=null);
+  const W=520,H=340,mL=44,mR=14,mT=14,mB=48;
+  const iw=W-mL-mR,ih=H-mT-mB;
+  const maxL=Math.max(...d.map(x=>x.load))*1.1;
+  const X=v=>mL+iw*v/100, Y=v=>mT+ih-ih*v/maxL;
+  const svg=mkSVG(W,H);box.appendChild(svg);
+  const geo={svg,W,mL,mR,mT,ih};
+  for(let v=0;v<=100;v+=25){el('line',{x1:X(v),x2:X(v),y1:mT,y2:mT+ih,class:'grid-line'},svg);
+    el('text',{x:X(v),y:mT+ih+18,'text-anchor':'middle',class:'axlbl tab'},svg).textContent=v;}
+  gridY(geo,{max:maxL});
+  axisLines(geo,true);
+  // trend
+  const pts=d.map(x=>[x.recovery,x.load]);const reg=linReg(pts);
+  if(reg)trendDash(geo,[X(20),Y(reg.m*20+reg.b),X(100),Y(reg.m*100+reg.b)],
+    {color:cvar('--ink-2'),width:1.5,dash:'5 4',opacity:.7});
+  d.forEach(x=>{const c=el('circle',{cx:X(x.recovery),cy:Y(x.load),r:3.4,
+    fill:`color-mix(in srgb, ${zoneColor(x.recovery)} 78%, transparent)`,class:'hoverable'},svg);
+    bindTip(c,`<div class="tth">${md(x.date)}</div>
+      <div class="ttr">Recovery: <b>${x.recovery}</b></div>
+      <div class="ttr">Load: <b>${fmt(x.load)}</b></div>
+      <div class="ttr">${x.sports.map(escHTML).join(', ')}</div>`);});
+  el('text',{x:mL+iw/2,y:H-6,'text-anchor':'middle',class:'axlbl'},svg).textContent='Recovery →';
+  el('text',{x:13,y:mT+ih/2,'text-anchor':'middle',class:'axlbl',transform:`rotate(-90 13 ${mT+ih/2})`},svg).textContent='Load (Σ strain) →';
+  const r=DATA.corr.rec_vs_load;
+  el('text',{x:W-mR,y:mT+12,'text-anchor':'end',class:'axlbl',fill:cvar('--ink-2'),'font-weight':600},svg).textContent='r = '+(r?fmt(r[0],2):'—');
+}
+
+// ============ 2d. SLEEP vs RECOVERY scatter — primary chart of "Связи факторов" ============
+function chartSleep(){
+  const box=$('#c_sleep');box.innerHTML='';
+  const d=DATA.days.filter(x=>x.sleep_h!=null&&x.recovery!=null);
+  const W=520,H=340,mL=44,mR=14,mT=14,mB=48;
+  const iw=W-mL-mR,ih=H-mT-mB;
+  const xs=d.map(x=>x.sleep_h);const xmin=Math.floor(Math.min(...xs)),xmax=Math.ceil(Math.max(...xs));
+  const X=v=>mL+iw*(v-xmin)/(xmax-xmin), Y=v=>mT+ih-ih*v/100;
+  const svg=mkSVG(W,H);box.appendChild(svg);
+  const geo={svg,W,mL,mR,mT,ih};
+  gridY(geo,{max:100,ticks:4});
+  for(let h=xmin;h<=xmax;h++){el('text',{x:X(h),y:mT+ih+18,'text-anchor':'middle',class:'axlbl tab'},svg).textContent=h;}
+  axisLines(geo,true);
+  const pts=d.map(x=>[x.sleep_h,x.recovery]);const reg=linReg(pts);
+  if(reg)trendDash(geo,[X(xmin),Y(reg.m*xmin+reg.b),X(xmax),Y(reg.m*xmax+reg.b)],
+    {color:cvar('--accent-2'),dash:'5 4',opacity:.85});
+  d.forEach(x=>{const c=el('circle',{cx:X(x.sleep_h),cy:Y(x.recovery),r:3.4,
+    fill:cvar('--accent-2'),'fill-opacity':.6,class:'hoverable'},svg);
+    bindTip(c,`<div class="tth">${md(x.date)}</div>
+      <div class="ttr">Sleep: <b>${fmt(x.sleep_h)} h</b></div>
+      <div class="ttr">Recovery: <b>${x.recovery}</b></div>`);});
+  el('text',{x:mL+iw/2,y:H-6,'text-anchor':'middle',class:'axlbl'},svg).textContent='Hours of sleep →';
+  el('text',{x:13,y:mT+ih/2,'text-anchor':'middle',class:'axlbl',transform:`rotate(-90 13 ${mT+ih/2})`},svg).textContent='Recovery →';
+  const r=DATA.corr.sleep_vs_recovery;
+  el('text',{x:mL+8,y:mT+12,class:'axlbl',fill:cvar('--accent-2'),'font-weight':600},svg).textContent='r = '+(r?fmt(r[0],2):'—')+' (strong relationship)';
+}
+
+// ============ 2e. CONNECTIONS card orchestration ============
+// Draws the primary sleep↔recovery chart, registers the weaker recovery↔load
+// correlation as a sheet-only metric (rendered via chartScatter), and fills in
+// the compact "other correlations" row with its r-value and a thin strength bar.
+function chartConnections(){
+  chartSleep();
+  const r=DATA.corr.rec_vs_load;
+  const coef=Array.isArray(r)&&r[0]!=null?Number(r[0]):null;
+  const magnitude=coef==null?0:Math.abs(coef);
+  const strength=magnitude>=.7?'strong':magnitude>=.4?'moderate':magnitude>=.2?'weak':'negligible';
+  const d=DATA.days.filter(x=>x.workout_count>0&&x.recovery!=null);
+  registerExpand({metric:'rec-load',title:'Recovery ↔ same-day load',unit:'strain',
+    color:cvar('--accent'),values:d.map(x=>x.load),dates:d.map(x=>x.date),dec:1,period:'day',
+    perLabel:`${d.length} paired ${d.length===1?'observation':'observations'}`,
+    note:'If load follows readiness, the points should rise up and right. A flat cloud means training load is effectively on autopilot.',
+    render:box=>chartScatter(box)});
+  const bar=$('#c_load_corr_bar');
+  if(bar)bar.style.width=Math.round(magnitude*100)+'%';
+  const rEl=$('#c_load_corr_r');
+  if(rEl)rEl.textContent='r = '+(coef!=null?fmt(coef,2):'—')+' · '+strength;
+}
+
+// ============ 3. PROGRESS small multiples (State chart language) ============
+// Re-materialized when this moved from Dynamics into Activity: thin 1.5px line
+// (unchanged — was already correctly thin), muted small dots instead of r:4
+// white-stroke markers, and a ring+core current-value marker on the last
+// point — same vocabulary as chartRecovery/chartSleep in Dynamics.
+function chartProgress(){
+  const box=$('#c_progress');box.innerHTML='';
+  const series=DATA.sport_series;
+  const top=DATA.sports.slice(0,3).map(s=>s.sport);
+  top.forEach(name=>{
+    const d=series[name];if(!d||d.length<2)return;
+    const cell=document.createElement('div');
+    const W=340,H=220,mL=34,mR=12,mT=26,mB=40;
+    const iw=W-mL-mR,ih=H-mT-mB;
+    const maxV=Math.max(...d.map(x=>x.strain))*1.12;
+    const t0=new Date(d[0].date).getTime(),t1=new Date(d[d.length-1].date).getTime();
+    const X=ds=>{const t=new Date(ds).getTime();return t1>t0?mL+iw*(t-t0)/(t1-t0):mL+iw/2;};
+    const Y=v=>mT+ih-ih*v/maxV;
+    const svg=mkSVG(W,H);
+    el('text',{x:mL,y:16,class:'axlbl',fill:cvar('--ink'),'font-size':13.5,'font-weight':700},svg).textContent=name;
+    for(let i=0;i<=4;i++){const v=maxV*i/4,y=Y(v);el('line',{x1:mL,x2:W-mR,y1:y,y2:y,class:'grid-line'},svg);
+      el('text',{x:mL-6,y:y+3,'text-anchor':'end',class:'axlbl tab','font-size':10},svg).textContent=Math.round(v);}
+    // trend by index
+    const pts=d.map((x,i)=>[i,x.strain]);const reg=linReg(pts);
+    if(reg)trendDash({svg},[X(d[0].date),Y(reg.b),X(d[d.length-1].date),Y(reg.m*(d.length-1)+reg.b)],
+      {color:cvar('--ink-2'),width:1.5,dash:'5 4',opacity:.7});
+    // connecting line
+    let p='';d.forEach((x,i)=>{p+=(i?'L':'M')+X(x.date)+' '+Y(x.strain)+' ';});
+    el('path',{d:p,fill:'none',stroke:cvar('--accent'),'stroke-width':1.5,opacity:.6,'stroke-linejoin':'round'},svg);
+    d.forEach((x,i)=>{
+      if(i===d.length-1)return; // последняя точка получает current-маркер ниже
+      const c=el('circle',{cx:X(x.date),cy:Y(x.strain),r:2.8,
+        fill:`color-mix(in srgb, ${cvar('--accent')} 78%, transparent)`,class:'hoverable'},svg);
+      bindTip(c,`<div class="tth">${name} · ${md(x.date)}</div>
+        <div class="ttr">Strain: <b>${fmt(x.strain,1)}</b></div>
+        <div class="ttr">Heart rate: ${x.avg_hr??'—'} (max ${x.max_hr??'—'})</div>
+        <div class="ttr">Duration: ${fmt(x.duration_min,0)} min</div>`);
+    });
+    const last=d[d.length-1];
+    el('circle',{cx:X(last.date),cy:Y(last.strain),r:6,fill:'none',stroke:cvar('--accent'),'stroke-width':1.4},svg);
+    const cur=el('circle',{cx:X(last.date),cy:Y(last.strain),r:2.8,fill:cvar('--accent'),class:'hoverable'},svg);
+    bindTip(cur,`<div class="tth">${name} · ${md(last.date)}</div>
+      <div class="ttr">Strain: <b>${fmt(last.strain,1)}</b></div>
+      <div class="ttr">Heart rate: ${last.avg_hr??'—'} (max ${last.max_hr??'—'})</div>
+      <div class="ttr">Duration: ${fmt(last.duration_min,0)} min</div>`);
+    // x labels first/last
+    el('text',{x:X(d[0].date),y:mT+ih+16,'text-anchor':'start',class:'axlbl','font-size':10},svg).textContent=md(d[0].date);
+    el('text',{x:X(d[d.length-1].date),y:mT+ih+16,'text-anchor':'end',class:'axlbl','font-size':10},svg).textContent=md(d[d.length-1].date);
+    const dir=reg&&reg.m>0.05?'rising':reg&&reg.m<-0.05?'falling':'flat';
+    el('text',{x:W-mR,y:16,'text-anchor':'end',class:'axlbl','font-weight':600,fill:cvar('--ink-2')},svg).textContent=dir;
+    cell.appendChild(svg);box.appendChild(cell);
+  });
+}
+
+// ============ RECORDS TABLE ============
+function tableRecords(){
+  const t=$('#t_records');
+  t.innerHTML=`<thead><tr><th>Activity</th><th>Sessions</th><th>Peak strain</th><th>Date</th>
+    <th>Longest</th><th>Max heart rate</th></tr></thead><tbody>
+    ${DATA.records.map(r=>`<tr>
+      <td>${escHTML(r.sport)}</td><td>${r.n}</td>
+      <td><b>${fmt(r.max_strain,1)}</b></td><td>${md(r.max_strain_date)}</td>
+      <td>${fmt(r.longest_min,0)} min</td>
+      <td>${r.max_hr??'—'}</td></tr>`).join('')}</tbody>`;
+}
+
+// ============ RANKED RECORDS (list with colored badges) ============
+// Слито с бывшей «Полной таблицей» (t_records): та таблица показывала те же
+// 6 полей (вид/трен./макс strain/дата/самая длинная/макс пульс), только датой
+// богаче. Клик по строке раскрывает именно дату рекорда — единственное поле,
+// которого не было в свёрнутом виде.
+function rankRecords(){
+  const box=$('#rank_records');if(!box)return;
+  const pal=palette();
+  box.innerHTML=DATA.records.map((r,i)=>{
+    const c=pal[i%pal.length];
+    return `<li class="rank-item" tabindex="0" role="button" aria-expanded="false"
+        aria-label="${escHTML(r.sport)} — reveal record date">
+      <span class="rank-num">${i+1}</span>
+      <span class="rank-dot" style="background:${c}"></span>
+      <span class="rank-main">
+        <span class="rank-name">${escHTML(r.sport)}</span>
+        <span class="rank-sub">
+          <span class="badge" style="background:color-mix(in srgb,${c} 18%,transparent);color:${c}">${r.n} ${r.n===1?'activity':'activities'}</span>
+          <span>longest ${fmt(r.longest_min,0)} min</span>
+          <span>max HR ${r.max_hr??'—'}</span>
+        </span>
+        <span class="rank-detail">The ${fmt(r.max_strain,1)} strain record was set on ${md(r.max_strain_date)}.</span>
+      </span>
+      <span class="rank-val">${fmt(r.max_strain,1)}<small>max strain</small></span>
+    </li>`;
+  }).join('');
+  box.querySelectorAll('.rank-item').forEach(item=>{
+    const toggle=()=>{const open=item.classList.toggle('is-open');
+      item.setAttribute('aria-expanded',open?'true':'false');};
+    item.addEventListener('click',toggle);
+    item.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}});
+  });
+}
+
+// ============ WARNINGS ============
+// fillWarnings удалена: списки дней-звоночков и недоиспользованного потенциала
+// рендерятся внутри своих evidence-карточек в fillInsights (один инсайт — одно
+// место на вкладке).
+
+// ============ LIFESTYLE FACTORS (section 5) ============
+// Полный отчёт живёт в detail sheet; на холсте — карточка с одной строкой-
+// резюме. Текст в БД/файле не меняется: эмодзи и обращения («Приветствую,
+// сэр», «Джарвис») вырезаются постобработкой строки при рендере.
+function fillLifestyle(){
+  const card=$('#ls_card'), gen=$('#ls_gen'), summary=$('#ls_summary');
+  if(!card)return;
+  const L=DATA.lifestyle;
+  if(!L||!L.present){
+    if(gen)gen.textContent='';
+    if(summary)summary.innerHTML='No lifestyle report yet. Run the local analysis step to <b>summarize recorded factors</b>.';
+    return;
+  }
+  if(gen)gen.textContent='updated from current data';
+  const days=Array.isArray(DATA.days)?DATA.days:[];
+  const measured=key=>days.map(day=>Number(day[key])).filter(Number.isFinite);
+  const average=(values,dec=0)=>values.length?fmt(values.reduce((sum,value)=>sum+value,0)/values.length,dec):'—';
+  const recovery=measured('recovery'),hrv=measured('hrv'),rhr=measured('resting_hr'),sleep=measured('sleep_h');
+  const sleepCorr=Array.isArray(DATA.corr?.sleep_vs_recovery)?DATA.corr.sleep_vs_recovery:null;
+  const factorCoverage=Boolean(DATA.canonical_read_model?.completeness?.daily_factor_table_present);
+  const paired=sleepCorr?.[1]??0;
+  const report=`<div class="ls-md ls-sheet">
+    <h3>Lifestyle and biometrics</h3>
+    <p>This view separates measured physiology from lifestyle hypotheses. Associations can guide questions, but they do not establish cause and effect.</p>
+    <h4>Current physiological context</h4>
+    <ul>
+      <li><b>Average Recovery:</b> ${average(recovery)}% across ${recovery.length} measurements.</li>
+      <li><b>Average HRV:</b> ${average(hrv,1)} ms.</li>
+      <li><b>Average resting heart rate:</b> ${average(rhr,1)} bpm.</li>
+      <li><b>Average sleep duration:</b> ${average(sleep,1)} h.</li>
+    </ul>
+    <h4>What the current data supports</h4>
+    <p>Sleep duration and next-morning Recovery have a ${sleepCorr?`${Math.abs(sleepCorr[0])>=.7?'strong':Math.abs(sleepCorr[0])>=.4?'moderate':'weak'} ${sleepCorr[0]>=0?'positive':'negative'} association (r = ${fmt(sleepCorr[0],2)}; ${paired} paired ${paired===1?'observation':'observations'})`:'relationship that cannot yet be estimated'}. This is an observed pattern, not a causal estimate.</p>
+    <h4>Factor-log coverage</h4>
+    <p>${factorCoverage?'Structured daily-factor records are available for comparison with physiological outcomes.':'No structured daily-factor records are available for this period. Effects from alcohol, caffeine, supplements, stress, or routines therefore cannot be estimated reliably from this dashboard.'}</p>
+    <p>Use consistent, dated factor logging before comparing outcomes. Consider health decisions and supplement use with a qualified clinician.</p>
+  </div>`;
+  if(summary)summary.textContent=factorCoverage
+    ? 'Structured lifestyle factors are available for comparison with physiological outcomes.'
+    : 'No structured factor log is available, so lifestyle effects cannot be estimated reliably.';
+  registerExpand({metric:'lifestyle',title:'Lifestyle',unit:'',color:cvar('--accent-2'),
+    values:[],perLabel:'current data coverage',
+    render:box=>{box.innerHTML=report;}});
+  if(!card.dataset.expandable){
+    card.dataset.expandable='1';
+    card.classList.add('expandable');
+    card.setAttribute('data-metric','lifestyle');card.setAttribute('tabindex','0');
+    card.setAttribute('role','button');card.setAttribute('aria-haspopup','dialog');
+    card.setAttribute('aria-label','Lifestyle — open data-coverage report');
+    card.insertAdjacentHTML('afterbegin',EXPAND_ICON);
+  }
+}
+
+// ============ TILES + INSIGHTS + HEADER ============
+function fillHeader(){
+  const days=Array.isArray(DATA.days)?DATA.days:[];
+  const reference=overviewRecoveryReference(days);
+  const referenceDate=reference?reference.date:null;
+  const emptyValue='—';
+
+  const integerValue=value=>popNum(String(Math.round(value)));
+  const percentValue=value=>integerValue(value)+'<small>%</small>';
+  const decimalValue=value=>{
+    const parts=value.toFixed(1).split('.');
+    return popNum(parts[0])+'<small>.'+parts[1]+'</small>';
+  };
+  const signedValue=(value,decimals=0)=>{
+    if(!overviewIsFiniteNumber(value))return null;
+    const factor=10**decimals;
+    const rounded=Math.round(value*factor)/factor;
+    const sign=rounded>0?'+':rounded<0?'−':'';
+    return sign+Math.abs(rounded).toFixed(decimals);
+  };
+  const durationValue=hours=>{
+    const totalMinutes=Math.max(0,Math.round(hours*60));
+    const h=Math.floor(totalMinutes/60),m=totalMinutes%60;
+    return popNum(String(h))+'<small> h </small>'+
+      popNum(String(m).padStart(2,'0'))+'<small> min</small>';
+  };
+  const metricSamples=(metric,count)=>referenceDate
+    ?overviewLastValidMetricSamples(days,metric,count,{throughDate:referenceDate,excludeDate:referenceDate})
+    :[];
+
+  const hrv=reference&&overviewIsFiniteNumber(reference.hrv)?reference.hrv:null;
+  const hrvBaselineSamples=metricSamples('hrv',28);
+  const hrvBaseline=hrvBaselineSamples.length>=7
+    ?overviewMean(hrvBaselineSamples.map(sample=>sample.value)):null;
+  const hrvDelta=overviewPercentageDelta(hrv,hrvBaseline);
+  const hrvComparison=hrv===null?'Insufficient data'
+    :hrvBaseline===null?'Building baseline'
+    :hrvDelta===null?''
+    :signedValue(hrvDelta)+'% vs baseline';
+
+  const restingHr=reference&&overviewIsFiniteNumber(reference.resting_hr)?reference.resting_hr:null;
+  const restingHrBaselineSamples=metricSamples('resting_hr',28);
+  const restingHrBaseline=restingHrBaselineSamples.length>=7
+    ?overviewMean(restingHrBaselineSamples.map(sample=>sample.value)):null;
+  const restingHrDelta=overviewAbsoluteDelta(restingHr,restingHrBaseline);
+  const restingHrComparison=restingHr===null?'Insufficient data'
+    :restingHrBaseline===null?'Building baseline'
+    :signedValue(restingHrDelta)+' vs baseline';
+
+  const sleepHours=reference&&overviewIsFiniteNumber(reference.sleep_h)&&reference.sleep_h>=0
+    ?reference.sleep_h:null;
+  const sleepBaselineSamples=metricSamples('sleep_h',7);
+  const sleepBaseline=sleepBaselineSamples.length>=3
+    ?overviewMean(sleepBaselineSamples.map(sample=>sample.value)):null;
+  const sleepDeltaMinutes=sleepBaseline===null||sleepHours===null
+    ?null:(sleepHours-sleepBaseline)*60;
+  const sleepComparison=sleepHours===null?'Insufficient data'
+    :sleepDeltaMinutes===null?''
+    :signedValue(sleepDeltaMinutes)+' min vs 7-day average';
+
+  const sleepPerformance=reference&&overviewIsFiniteNumber(reference.sleep_perf)
+    ?reference.sleep_perf:null;
+  const sleepPerformanceSamples=metricSamples('sleep_perf',7);
+  const sleepPerformanceBaseline=sleepPerformanceSamples.length>=3
+    ?overviewMean(sleepPerformanceSamples.map(sample=>sample.value)):null;
+  const sleepPerformanceDelta=overviewAbsoluteDelta(sleepPerformance,sleepPerformanceBaseline);
+  const sleepPerformanceComparison=sleepPerformance===null?'Insufficient data'
+    :sleepPerformanceDelta===null?''
+    :signedValue(sleepPerformanceDelta)+' pp vs 7-day average';
+
+  const previousLoad=referenceDate?overviewPreviousDayLoad(days,referenceDate)
+    :{date:null,row:null,present:false,hasValue:false,value:null};
+  const loadBaselineWindow=referenceDate
+    ?overviewSummarizeMetricWindow(overviewCalendarWindow(days,referenceDate,-8,-2),'load')
+    :null;
+  const loadBaseline=loadBaselineWindow&&loadBaselineWindow.sufficient
+    ?loadBaselineWindow.sum/loadBaselineWindow.expected:null;
+  const loadDelta=previousLoad.hasValue?overviewAbsoluteDelta(previousLoad.value,loadBaseline):null;
+  const loadComparison=!previousLoad.present?'No data'
+    :!previousLoad.hasValue?'Insufficient data'
+    :previousLoad.value===0?'No activity that day'
+    :loadDelta===null?''
+    :signedValue(loadDelta,1)+' vs 7-day average';
+
+  const recoveryWindows=referenceDate?overviewRecoveryWindows(days,referenceDate,7):null;
+  const currentRecovery=recoveryWindows&&recoveryWindows.current.sufficient
+    ?recoveryWindows.current.mean:null;
+  const recoveryComparison=currentRecovery===null?'Insufficient data'
+    :recoveryWindows.previous.sufficient
+      ?signedValue(recoveryWindows.comparison.absolute)+' pp vs prior 7 days':'';
+
+  if(!EXPAND_SPECS.sleep){
+    registerExpand({metric:'sleep',title:'Sleep',unit:'h',color:cvar('--accent-2'),
+      values:days.map(row=>overviewIsFiniteNumber(row.sleep_h)?row.sleep_h:null),
+      dates:days.map(row=>row.date),dec:1,period:'day',note:sleepSheetNote(),render:renderSleepSheet});
+  }
+  if(!EXPAND_SPECS.load){
+    registerExpand({metric:'load',title:'Daily load',unit:'strain',color:cvar('--accent'),
+      values:days.map(row=>overviewIsFiniteNumber(row.load)?row.load:null),
+      dates:days.map(row=>row.date),dec:1,period:'day',note:loadSheetNote(),render:renderLoadSheet});
+  }
+
+  const tiles=[
+    {label:'Today’s HRV',value:hrv===null?emptyValue:integerValue(hrv)+'<small> ms</small>',
+      comparison:hrvComparison,cls:'metric-hrv',metric:'hrv'},
+    {label:'Today’s resting HR',value:restingHr===null?emptyValue:integerValue(restingHr)+'<small> bpm</small>',
+      comparison:restingHrComparison,cls:'metric-rhr',metric:'rhr'},
+    {label:'Sleep duration',value:sleepHours===null?emptyValue:durationValue(sleepHours),
+      comparison:sleepComparison,cls:'metric-sleep',metric:'sleep'},
+    {label:'Sleep Performance',value:sleepPerformance===null?emptyValue:percentValue(sleepPerformance),
+      comparison:sleepPerformanceComparison,cls:'metric-sleep-performance',metric:'sleep'},
+    {label:'Previous-day load',
+      value:previousLoad.hasValue?decimalValue(previousLoad.value)+'<small> strain</small>':emptyValue,
+      comparison:loadComparison,cls:'metric-load',metric:'load'},
+    {label:'7-day Recovery',value:currentRecovery===null?emptyValue:percentValue(currentRecovery),
+      comparison:recoveryComparison,cls:'metric-recovery',metric:'recovery'}
+  ];
+
+  $('#tiles').innerHTML=tiles.map(tile=>
+    '<div class="tile '+(tile.cls||'')+(tile.metric?' expandable':'')+'"'+expandAttrs(tile.metric,tile.label)+'>'+
+      (tile.metric?EXPAND_ICON:'')+
+      '<div class="k">'+tile.label+'</div>'+
+      '<div class="body">'+
+        '<div class="v">'+tile.value+'</div>'+
+        (tile.comparison?'<div class="u">'+tile.comparison+'</div>':'')+
+      '</div>'+
+    '</div>').join('');
+}
+// Иконки инсайтов удалены вместе с плашками: evidence-карточки Фазы 6 передают
+// тон текстовым чипом. Общий Tabler-реестр — TICON_PATHS/ticon ниже.
+
+// ============ ИНСАЙТЫ: календарь-теплокарта recovery ============
+function heatmapCalendar(){
+  const box=$('#c_heatmap');if(!box)return;
+  // перерендер панели сбрасывает подсветку (hmSelected=null в renderPanel) — статус тоже
+  const hint=$('#hm_hint');if(hint){hint.textContent='';hint.hidden=true;}
+  const days=DATA.days;
+  if(!days.length){box.innerHTML='';return;}
+  // GitHub-стиль: колонки = недели, строки = дни недели (Пн..Вс)
+  const dowOf=ds=>{const wd=new Date(ds+'T12:00:00').getDay();return (wd+6)%7;} // Пн=0
+  const cells=[];
+  for(let i=0;i<dowOf(days[0].date);i++)cells.push('<div class="hm-cell pad"></div>');
+  days.forEach(x=>{
+    const z=x.zone?'z-'+x.zone:'z-none';
+    cells.push(`<div class="hm-cell ${z}" data-date="${x.date}" tabindex="-1" role="img"
+      aria-label="${md(x.date)}: Recovery ${x.recovery??'no data'}"></div>`);
+  });
+  const DOW=['Mon','','Wed','','Fri','','Sun'];
+  box.innerHTML=`<div class="hm-wrap">
+      <div class="hm-dow">${DOW.map(d=>`<span>${d}</span>`).join('')}</div>
+      <div class="hm-grid" id="hm_grid">${cells.join('')}</div>
+    </div>
+    <div class="hm-legend">
+      <span class="it"><span class="sw" style="background:var(--good)"></span> high (≥67)</span>
+      <span class="it"><span class="sw" style="background:var(--warn)"></span> moderate (34–66)</span>
+      <span class="it"><span class="sw" style="background:var(--crit)"></span> low (&lt;34)</span>
+      <span class="it"><span class="sw" style="background:var(--surface-2)"></span> no data</span>
+    </div>`;
+  const byDate={};days.forEach(x=>byDate[x.date]=x);
+  box.querySelectorAll('.hm-cell[data-date]').forEach(cell=>{
+    const x=byDate[cell.dataset.date];
+    bindTip(cell,`<div class="tth">${md(x.date)} · ${x.dow}</div>
+      <div class="ttr">Recovery: <b>${x.recovery??'—'}</b>${x.recovery!=null?' ('+zoneName(x.recovery)+')':''}</div>
+      <div class="ttr">Load: ${fmt(x.load)}${x.sleep_h!=null?' · sleep '+fmt(x.sleep_h)+' h':''}</div>`);
+  });
+}
+// ============ ИНСАЙТЫ: ритм недели ============
+// Добавлено по данным: разница между худшим и лучшим днём недели по recovery
+// достигает десятков пунктов (напр. среда ~44 против воскресенья ~83) —
+// в календаре-теплокарте этот паттерн есть, но глазом не считывается.
+// отрисовка вынесена отдельно: тот же график рендерится и в карточке (680×280),
+// и крупнее в детальном оверлее по клику (см. registerExpand с render ниже)
+function drawDow(box,rows,W,H){
+  box.innerHTML='';
+  const mL=40,mR=14,mT=22,mB=40;
+  const iw=W-mL-mR,ih=H-mT-mB;
+  const svg=mkSVG(W,H);box.appendChild(svg);
+  const geo={svg,W,mL,mR,mT,ih};
+  gridY(geo,{max:100,ticks:4});
+  axisLines(geo);
+  const maxLoad=Math.max(...rows.map(r=>r.load||0),1);
+  const bw=iw/7;
+  rows.forEach(r=>{
+    const cx=mL+bw*r.i+bw/2;
+    if(r.rec!=null){
+      const h=ih*r.rec/100,y=mT+ih-h;
+      const rect=el('rect',{x:cx-27,y,width:34,height:Math.max(2,h),rx:5,
+        fill:`color-mix(in srgb, ${zoneColor(r.rec)} 76%, transparent)`,class:'hoverable'},svg);
+      bindTip(rect,`<div class="tth">${r.name} · ${r.n} ${r.n===1?'measurement':'measurements'}</div>
+        <div class="ttr">Average Recovery: <b>${fmt(r.rec,0)}</b> (${zoneName(r.rec)})</div>
+        <div class="ttr">Prior-night sleep: ${r.sleep!=null?fmt(r.sleep)+' h':'—'}</div>
+        <div class="ttr">Average load: ${fmt(r.load)}</div>`);
+      el('text',{x:cx-10,y:y-7,'text-anchor':'middle',class:'axlbl tab',
+        fill:cvar('--ink-2'),'font-weight':600},svg).textContent=Math.round(r.rec);
+    }
+    if(r.load){ // нагрузка — узкий оранжевый столбик, шкала своя (до max средней)
+      const lh=ih*0.85*r.load/maxLoad;
+      el('rect',{x:cx+13,y:mT+ih-lh,width:8,height:Math.max(2,lh),rx:2,
+        fill:`color-mix(in srgb, ${cvar('--accent')} 66%, transparent)`},svg);
+    }
+    el('text',{x:cx,y:mT+ih+18,'text-anchor':'middle',class:'axlbl'},svg).textContent=r.name;
+  });
+}
+function chartDow(){
+  const box=$('#c_dow');if(!box)return;
+  const agg=Array.from({length:7},()=>({rec:[],load:[],sleep:[]}));
+  DATA.days.forEach(x=>{
+    const w=(new Date(x.date+'T12:00:00').getDay()+6)%7; // Пн=0
+    if(x.recovery!=null)agg[w].rec.push(x.recovery);
+    agg[w].load.push(x.load||0);
+    if(x.sleep_h!=null)agg[w].sleep.push(x.sleep_h);
+  });
+  const DOWF=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const rows=agg.map((a,i)=>({i,name:DOWF[i],rec:meanOf(a.rec),load:meanOf(a.load),
+    sleep:meanOf(a.sleep),n:a.rec.length}));
+  drawDow(box,rows,680,280);
+  const tag=$('#dow_tag');
+  if(tag)tag.textContent=`${DATA.days.length} days · ~${Math.round(DATA.days.length/7)} weeks`;
+  // вывод о слабом/сильном дне ушёл с компактного вида в детальный оверлей:
+  // на дашборде — только график, текст появляется в момент раскрытия
+  let note='';
+  const known=rows.filter(r=>r.rec!=null&&r.n>=3);
+  if(known.length>=4){
+    const worst=known.reduce((a,b)=>b.rec<a.rec?b:a);
+    const best=known.reduce((a,b)=>b.rec>a.rec?b:a);
+    const prev=rows[(worst.i+6)%7];
+    note=`<b>${worst.name}</b> is consistently the weakest day, with average Recovery of <b>${fmt(worst.rec,0)}</b>`
+      +(worst.sleep!=null?` after <b>${fmt(worst.sleep)} h</b> of sleep`:'')
+      +(prev&&prev.load?`, following average load of ${fmt(prev.load)} on ${prev.name}`:'')
+      +`. <b>${best.name}</b> is strongest at ${fmt(best.rec,0)} average Recovery. Schedule the heaviest sessions for high-Recovery days rather than ${worst.name}.`;
+  }
+  registerExpand({metric:'dow',title:'Weekly rhythm',unit:'',color:cvar('--accent-lime'),
+    values:rows.map(r=>r.rec),dec:0,note,
+    perLabel:`average Recovery by weekday · ${DATA.days.length} days`,
+    render:b=>drawDow(b,rows,Math.max(560,b.clientWidth||640),320)});
+  const card=box.closest('.card');
+  if(card&&!card.dataset.expandable){
+    card.dataset.expandable='1';
+    card.classList.add('expandable');
+    card.setAttribute('data-metric','dow');card.setAttribute('tabindex','0');
+    card.setAttribute('role','button');card.setAttribute('aria-haspopup','dialog');
+    card.setAttribute('aria-label','Weekly rhythm — open detailed chart');
+    card.insertAdjacentHTML('afterbegin',EXPAND_ICON);
+  }
+}
+
+// подсветка набора дат на теплокарте; повторный вызов с теми же датами снимает
+let hmSelected=null;
+function highlightHeatmap(dates,key){
+  const grid=$('#hm_grid');if(!grid)return;
+  const clear=()=>{grid.classList.remove('has-hl');
+    grid.querySelectorAll('.hm-cell.hl').forEach(c=>c.classList.remove('hl'));};
+  document.querySelectorAll('.factor-evidence-card.selected').forEach(c=>c.classList.remove('selected'));
+  // статус в шапке календаря: пуст в покое, текст живёт только пока активна подсветка
+  const hint=$('#hm_hint');
+  if(hmSelected===key){hmSelected=null;clear();swapText(hint,'');return;}
+  clear();hmSelected=key;
+  const set=new Set(dates);
+  grid.querySelectorAll('.hm-cell[data-date]').forEach(c=>{
+    if(set.has(c.dataset.date))c.classList.add('hl');});
+  grid.classList.add('has-hl');
+  document.querySelector(`.factor-evidence-card[data-hl="${key}"]`)?.classList.add('selected');
+  swapText(hint,`${dates.length} ${dates.length===1?'day':'days'} highlighted · select again to clear`);
+  $('#hm_card')?.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth',block:'nearest'});
+}
+
+// ---- встроенные визуализации карточек-выводов ----
+// компактный scatter связи X→Y: только точки + линия тренда, без осей (sparkline-scatter)
+function miniScatter(pairs,color){
+  const W=150,H=64,pad=7;
+  const v=pairs.filter(p=>p[0]!=null&&p[1]!=null);
+  if(v.length<3)return '';
+  const xs=v.map(p=>p[0]),ys=v.map(p=>p[1]);
+  const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
+  const X=x=>pad+(W-2*pad)*(x-x0)/((x1-x0)||1);
+  const Y=y=>H-pad-(H-2*pad)*(y-y0)/((y1-y0)||1);
+  const reg=linReg(v);
+  const dots=v.map(p=>`<circle cx="${X(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="2.6" fill="${color}" fill-opacity="0.7"/>`).join('');
+  const trend=reg?`<line x1="${X(x0).toFixed(1)}" y1="${Y(reg.m*x0+reg.b).toFixed(1)}" x2="${X(x1).toFixed(1)}" y2="${Y(reg.m*x1+reg.b).toFixed(1)}"
+     stroke="${cvar('--trend-line')}" stroke-width="2" stroke-linecap="round"/>`:'';
+  return `<span class="ins-scatter"><svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-hidden="true">${dots}${trend}</svg></span>`;
+}
+// шкала силы связи: |r| → заполнение 0..1, цвет и подпись по силе
+function rBar(r,name){
+  if(r==null)return '';
+  const a=Math.abs(r);
+  const strength=a>=0.5?['strong relationship',cvar('--accent')]:a>=0.3?['moderate relationship',cvar('--warn')]:['weak relationship',cvar('--muted')];
+  return `<span class="rbar"><span class="lbl"><span class="nm" style="color:${strength[1]}">${strength[0]}</span>
+    <span class="rv">r ${fmt(r,2)}</span></span>
+    <span class="track" style="display:block"><span class="fill" style="display:block;width:${Math.round(a*100)}%;background:${strength[1]}"></span></span>
+    ${name?`<span class="lbl" style="margin:4px 0 0"><span class="rv">${name}</span></span>`:''}</span>`;
+}
+
+function fillInsights(){
+  const s=DATA.summary,c=DATA.corr;
+  const rlV=c.rec_vs_load?c.rec_vs_load[0]:null;
+  const srV=c.sleep_vs_recovery?c.sleep_vs_recovery[0]:null;
+  const rl=rlV!=null?fmt(rlV,2):'—', sr=srV!=null?fmt(srV,2):'—';
+  const sleepPairs=DATA.days.filter(x=>x.sleep_h!=null&&x.recovery!=null).map(x=>[x.sleep_h,x.recovery]);
+  const loadPairs=DATA.days.filter(x=>x.workout_count>0&&x.recovery!=null).map(x=>[x.recovery,x.load]);
+  // Все формулировки собираются из DATA — раньше даты/цифры («17, 24 и 26 июня»,
+  // «пик ~93», «бег — 187») были зашиты в шаблон и устаревали с каждым днём.
+  const redList=DATA.red_hard_days,redDates=redList.map(x=>x.date);
+  const underList=DATA.undertrained,underDates=underList.map(x=>x.date);
+  // диапазон значений по списку дней: «43–49» (или одно число, если совпадают)
+  const rng=(arr,f,dec=0)=>{if(!arr.length)return '—';
+    const lo=Math.min(...arr.map(f)),hi=Math.max(...arr.map(f));
+    return lo===hi?fmt(lo,dec):fmt(lo,dec)+'–'+fmt(hi,dec);};
+  const bestU=underList.length?[...underList].sort((a,b)=>b.recovery-a.recovery)[0]:null;
+  // «Прогресс и рекорды» с этой вкладки удалена (домен Активности), поэтому
+  // peakW/topAvg/hrRec больше не считаются.
+  // Списки дней рендерятся ВНУТРИ evidence-карточек (бывшая отдельная секция
+  // «Дни для решения» удалена — каждый инсайт живёт на вкладке один раз).
+  const dayRows=list=>list.length?`<ul class="warn-list">${list.map(x=>`<li>
+      <span class="d">${md(x.date)}</span>
+      <span class="m"><span class="pill ${x.recovery>=67?'green':x.recovery>=34?'':'red'}">rec ${x.recovery}</span> · load <b>${fmt(x.load)}</b>${x.sports&&x.sports.length?' · '+x.sports.map(escHTML).join(', '):x.workout_count?'':' · no activity'}</span></li>`).join('')}</ul>`:'';
+  // [tone, заголовок, текст, viz-html, day-list-html, {hlKey,dates}]
+  const ins=[
+    ['info','Sleep is your strongest Recovery lever',
+     `Nightly sleep has the strongest relationship with next-morning Recovery. Same-day Recovery is almost <b>unrelated</b> to load (r ${rl}). The clearest action is simple: <b>protect sleep</b>.`,
+     rBar(srV,'sleep → next-morning Recovery')+miniScatter(sleepPairs,cvar('--accent-2')),'',null],
+    ['warn','Your training load is on autopilot',
+     `Recovery and load are nearly unrelated, so training stays similar on high- and moderate-readiness days. ${s.n_red===0?'There is no persistent low-zone pattern.':`${s.n_red} low-zone days occurred in this period.`} The plan is not yet adapting to physiological feedback.`,
+     rBar(rlV,'Recovery → same-day load')+miniScatter(loadPairs,cvar('--accent')),'',null],
+  ];
+  if(redList.length){
+    ins.push(['crit',
+      `${redList.length} load warning ${redList.length===1?'day':'days'}`,
+      `Heavy load (Σ strain ${rng(redList,x=>x.load)}) occurred with low Recovery (${rng(redList,x=>x.recovery)}). An isolated day is not concerning, but a sequence would be an early overload signal.`,
+      '',dayRows(redList),{key:'red',dates:redDates}]);
+  }else{
+    ins.push(['good','No load-warning days',
+      `No heavy-load sessions occurred on low-Recovery days; training aligned well with readiness.`,'','',null]);
+  }
+  if(underList.length){
+    ins.push(['good','Underused training potential',
+      `${underList.length} high-Recovery ${underList.length===1?'day had':'days had'} little or no training (${rng(underList,x=>x.recovery)}), including <b>${md(bestU.date)} at Recovery ${bestU.recovery}</b>. These are the best windows for the heaviest sessions.`,
+      '',dayRows(underList),{key:'under',dates:underDates}]);
+  }else{
+    ins.push(['info','No unused high-readiness windows',
+      `Every high-zone day received training load, so the available capacity was fully used.`,'','',null]);
+  }
+  // порог 7 часов сна: сравнение среднего recovery после коротких и нормальных ночей
+  const loN=DATA.days.filter(x=>x.sleep_h!=null&&x.sleep_h<7&&x.recovery!=null);
+  const hiN=DATA.days.filter(x=>x.sleep_h!=null&&x.sleep_h>=7&&x.recovery!=null);
+  if(loN.length>=3&&hiN.length>=3){
+    const lm=Math.round(meanOf(loN.map(x=>x.recovery))),hm=Math.round(meanOf(hiN.map(x=>x.recovery)));
+    if(hm-lm>=10)ins.push(['warn',
+      `The 7-hour sleep threshold is worth ${hm-lm} Recovery points`,
+      `After ${loN.length} nights shorter than 7 hours, average Recovery is <b>${lm}</b>; after 7 or more hours, it is <b>${hm}</b>. Bedtime is the most actionable lever in this dataset. The threshold is marked on the sleep history.`,'','',null]);
+  }
+  // дрейф формы: сравнение половин периода по recovery/HRV/пульсу покоя
+  const halfN=Math.floor(DATA.days.length/2);
+  const mHalf=(k,part)=>meanOf((part?DATA.days.slice(halfN):DATA.days.slice(0,halfN)).map(x=>x[k]));
+  const rA=mHalf('recovery',0),rB=mHalf('recovery',1),hA=mHalf('hrv',0),hB=mHalf('hrv',1),
+        pA=mHalf('resting_hr',0),pB=mHalf('resting_hr',1);
+  if(rA!=null&&rB!=null&&hA!=null&&hB!=null){
+    const dRec=rB-rA,dHrv=hB-hA,dRhr=(pB!=null&&pA!=null)?pB-pA:null;
+    if(dRec<=-3&&dHrv<0){
+      ins.push(['warn','A quiet downward drift in the second half',
+        `Recovery ${fmt(rA,0)} → ${fmt(rB,0)} (Δ ${fmt(dRec,1)}), HRV ${fmt(hA,0)} → ${fmt(hB,0)} ms${dRhr!=null&&dRhr>0?`, resting HR +${fmt(dRhr,1)} bpm`:''}. Each shift alone may be noise, but together they point toward fatigue. This is a good moment to plan a deload week.`,'','',null]);
+    }else if(dRec>=3&&dHrv>0){
+      ins.push(['good','Form is improving',
+        `The second half is stronger than the first: Recovery ${fmt(rA,0)} → ${fmt(rB,0)}, HRV ${fmt(hA,0)} → ${fmt(hB,0)} ms. The body is absorbing load, so volume can increase carefully.`,'','',null]);
+    }
+  }
+  // «Прогресс и рекорды» ушла с Факторов: это домен Активности (фаза 4), а
+  // здесь она дублировала данные соседней вкладки.
+  // Evidence-карточки в card-языке Фазы 6: обычный .card, тон — маленький чип
+  // в шапке (не цветной борт и не иконка-плашка). Кликабельные карточки
+  // (звоночки/потенциал) сохраняют подсветку дат на календаре.
+  const TONE_LABEL={info:'observation',warn:'attention',crit:'risk',good:'opportunity'};
+  const HL_HINT='<span class="hint">Select to highlight these days on the calendar above</span>';
+  const grid=$('#insights');
+  grid.classList.add('factor-evidence-grid');
+  grid.innerHTML=ins.map(([tone,h,p,viz,days,hl])=>
+    `<article class="card factor-evidence-card${hl?' clickable':''}" data-tone="${tone}"${hl?` data-hl="${hl.key}" tabindex="0" role="button" aria-pressed="false"`:''}>
+      <div class="card-head"><h2>${h}</h2><span class="factor-tone-chip" data-tone="${tone}">${TONE_LABEL[tone]}</span></div>
+      <p class="p">${p}</p>
+      ${viz?`<div class="ins-viz">${viz}</div>`:''}
+      ${days||''}
+      ${hl?HL_HINT:''}
+    </article>`).join('');
+  // клик/Enter по карточке с датами → подсветка на теплокарте
+  ins.forEach(([,,,,,hl])=>{
+    if(!hl)return;
+    const card=document.querySelector(`.factor-evidence-card[data-hl="${hl.key}"]`);
+    const fire=()=>{highlightHeatmap(hl.dates,hl.key);
+      card.setAttribute('aria-pressed',hmSelected===hl.key?'true':'false');};
+    card.addEventListener('click',fire);
+    card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();fire();}});
+  });
+}
+
+// ============ ОБЗОР: sparkline + датчик + таймлайн сна ============
+// тонкая линия-тренд без осей; конечная точка — текущее значение
+function spark(values,color,h){
+  h=h||30;const W=100,pad=3;
+  const v=values.filter(x=>x!=null&&!isNaN(x));
+  if(v.length<2)return '';
+  const mn=Math.min(...v),mx=Math.max(...v),rng=(mx-mn)||1;
+  const X=i=>(i/(v.length-1))*W;
+  const Y=val=>pad+(h-2*pad)*(1-(val-mn)/rng);
+  let p='';v.forEach((val,i)=>{p+=(i?'L':'M')+X(i).toFixed(1)+' '+Y(val).toFixed(1)+' ';});
+  return `<svg viewBox="0 0 ${W} ${h}" preserveAspectRatio="none" role="img" aria-hidden="true">
+    <path d="${p}L ${W} ${h} L 0 ${h} Z" fill="${color}" fill-opacity="0.13"/>
+    <path d="${p}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>
+  </svg>`;
+}
+// ---- универсальное раскрытие sparkline-карточек ----
+// Любая карточка с sparkline регистрирует spec (метрика + значения + даты + опц.
+// смысловые зоны) и получает data-metric; один делегированный обработчик открывает
+// её в детальном оверлее. Ничего не хардкодится под конкретную карточку.
+const EXPAND_SPECS={};
+const EXPAND_ICON='<span class="expand-hint"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></span>';
+// Единый набор иконок — точная геометрия Tabler Icons (MIT, outline, viewBox 24).
+// Всегда инлайн (дашборд самодостаточен, без внешних запросов); stroke берёт
+// currentColor, толщина 1.7 — под тонкий язык графиков.
+const TICON_PATHS={
+  x:['M18 6l-12 12','M6 6l12 12'],
+  strength:['M2 12h1','M6 8h-2a1 1 0 0 0 -1 1v6a1 1 0 0 0 1 1h2','M6 7v10a1 1 0 0 0 1 1h1a1 1 0 0 0 1 -1v-10a1 1 0 0 0 -1 -1h-1a1 1 0 0 0 -1 1z','M9 12h6','M15 7v10a1 1 0 0 0 1 1h1a1 1 0 0 0 1 -1v-10a1 1 0 0 0 -1 -1h-1a1 1 0 0 0 -1 1z','M18 8h2a1 1 0 0 1 1 1v6a1 1 0 0 1 -1 1h-2','M22 12h-1'],
+  capsule:['M4.5 12.5l8 -8a4.94 4.94 0 0 1 7 7l-8 8a4.94 4.94 0 0 1 -7 -7','M8.5 8.5l7 7'],
+  cardio:['M13 4m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0','M4 17l5 1l.75 -1.5','M15 21l0 -4l-4 -3l1 -6','M7 12l0 -3l5 -1l3 3l3 1'],
+  calendar:['M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z','M16 3v4','M8 3v4','M4 11h16','M11 15h1','M12 15v3'],
+  moon:['M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z'],
+  notes:['M5 3m0 2a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2z','M9 7l6 0','M9 11l6 0','M9 15l4 0']
+};
+const ticon=(name,size=15)=>`<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${(TICON_PATHS[name]||[]).map(d=>`<path d="${d}"/>`).join('')}</svg>`;
+const RECOVERY_ZONES=[[67,100,'--good'],[34,67,'--warn'],[0,34,'--crit']];
+// note — текст-вывод, показывается ТОЛЬКО в оверлее (компактный вид — чистые данные);
+// render — кастомный рендерер вместо detailChart; perLabel — подпись периода в шапке
+function registerExpand({metric,title,unit,color,values,dates,dec,zones,period,note,render,perLabel}){
+  EXPAND_SPECS[metric]={metric,title,unit:unit||'',color,values,dates:dates||null,
+    dec:dec==null?0:dec,zones:zones||null,period:period||'day',
+    note:note||'',render:render||null,perLabel:perLabel||''};
+}
+function expandAttrs(metric,label){
+  return metric?` data-metric="${metric}" tabindex="0" role="button" aria-haspopup="dialog" aria-label="${label} — open detailed chart"`:'';
+}
+const heroMini=({k,value,unit,series,color,metric,dates,dec,zones,period})=>{
+  if(metric)registerExpand({metric,title:k,unit,color,values:series,dates,dec,zones,period});
+  return `<div class="spark-mini${metric?' expandable':''}"${expandAttrs(metric,k)}>
+  ${metric?EXPAND_ICON:''}
+  <div class="k">${k}</div>
+  <div class="v">${value}${unit?`<small>${unit}</small>`:''}</div>
+  <div class="sp">${spark(series,color,26)}</div></div>`;
+};
+function miniCard(elm,{k,value,valueHtml,unit,series,color,trend,metric,dates,dec,zones,period,note}){
+  if(!elm)return;
+  if(metric){
+    // note не рендерится на карточке — уходит в spec и показывается при раскрытии
+    registerExpand({metric,title:k,unit,color,values:series,dates,dec,zones,period,note});
+    elm.classList.add('expandable');
+    elm.setAttribute('data-metric',metric);elm.setAttribute('tabindex','0');
+    elm.setAttribute('role','button');elm.setAttribute('aria-haspopup','dialog');
+    elm.setAttribute('aria-label',k+' — open detailed chart');
+  }else{
+    elm.classList.remove('expandable');
+    ['data-metric','tabindex','role','aria-haspopup','aria-label'].forEach(name=>elm.removeAttribute(name));
+  }
+  elm.innerHTML=`${metric?EXPAND_ICON:''}<div class="k">${k}</div>
+    <div class="v">${valueHtml==null?popNum(value):valueHtml}${unit?`<small>${unit}</small>`:''}</div>
+    ${trend?`<div class="trend" style="color:${trend.color}">${trend.txt} <span class="base">${trend.base}</span></div>`:''}
+    <div class="sp">${spark(series,color,40)}</div>`;
+}
+// Дельта = последнее значение МИНУС предыдущее известное (обычно вчера), знак
+// математически честный: рост → «+», падение → «−». База сравнения всегда
+// возвращается текстом и выводится подписью рядом с дельтой — раньше сравнение
+// шло с первым днём всего окна (месяц назад) и нигде не подписывалось.
+function deltaVsPrev(series,unit,baseLabel){
+  const v=series.filter(x=>x!=null);if(v.length<2)return null;
+  const d=v[v.length-1]-v[v.length-2];
+  const base=baseLabel||'vs previous day';
+  if(Math.abs(d)<0.05)return {txt:'→ no change',color:cvar('--muted'),base,d:0};
+  const up=d>0;
+  return {txt:(up?'▲ +':'▼ −')+fmt(Math.abs(d),0)+(unit?' '+unit:''),
+          color:up?cvar('--good'):cvar('--crit'),base,d};
+}
+
+// 1. КРУГОВОЙ ДАТЧИК Recovery — радиальное кольцо прогресса (макет Stitch):
+//    фоновое кольцо + пунктирное кольцо-шкала + цветное кольцо-значение со свечением,
+//    в центре крупное число + зона + чип дельты.
+function gaugeRecovery(){
+  const box=$('#c_gauge');if(!box)return;box.innerHTML='';
+  const last=overviewRecoveryReference(DATA.days);
+  const val=last?last.recovery:null;
+  const previousDate=last?overviewPreviousLocalDate(last.date):null;
+  const previous=previousDate?overviewFindDay(DATA.days,previousDate):null;
+  const previousRecovery=previous&&overviewIsFiniteNumber(previous.recovery)?previous.recovery:null;
+  const recoveryDelta=overviewIsFiniteNumber(val)&&previousRecovery!==null?val-previousRecovery:null;
+  const deltaLabel=recoveryDelta===null?''
+    :recoveryDelta===0?'No change vs yesterday'
+    :(recoveryDelta>0?'+':'−')+fmt(Math.abs(recoveryDelta),0)+' pp vs yesterday';
+  const col=val!=null?zoneColor(val):cvar('--muted');
+  const svg=mkSVG(100,100);box.appendChild(svg);
+  const host=box.closest('.card');
+  // мягкая фоновая подсветка цветом текущей зоны (box очищен выше — дублей не будет)
+  const gl=document.createElement('div');
+  gl.className='gauge-glow';
+  gl.style.background=col;
+  box.appendChild(gl);
+
+  // кольца (повёрнуты на -90°, чтобы прогресс начинался сверху)
+  const g=el('g',{transform:'rotate(-90 50 50)'},svg);
+  el('circle',{cx:50,cy:50,r:46,fill:'none',stroke:'rgba(255,255,255,.04)','stroke-width':1},g);
+  el('circle',{cx:50,cy:50,r:38,fill:'none',stroke:'rgba(255,255,255,.06)','stroke-width':4,'stroke-dasharray':'2 4'},g);
+  if(val!=null){
+    const C=2*Math.PI*46;
+    const ring=el('circle',{cx:50,cy:50,r:46,fill:'none',stroke:col,'stroke-width':2.6,
+      'stroke-dasharray':C.toFixed(1),'stroke-dashoffset':C.toFixed(1),'stroke-linecap':'round'},g);
+    ring.classList.add('gauge-ring');
+    ring.style.filter=`drop-shadow(0 0 5px ${col})`;
+    // цели анимации храним на самом кольце: слушатель hover ниже регистрируется
+    // ОДИН раз на карточку-хост и читает актуальное кольцо из DOM
+    ring.dataset.full=C.toFixed(1);
+    ring.dataset.target=(C*(1-val/100)).toFixed(1);
+
+    // Плавная прорисовка при загрузке
+    setTimeout(()=>{ring.style.strokeDashoffset=ring.dataset.target;},60);
+
+    // Сброс и повторная прорисовка при наведении. Хост живёт между рендерами,
+    // поэтому без флага addEventListener при каждом рендере копил бы дубликаты.
+    if(host&&!host.dataset.gaugeHover){
+      host.dataset.gaugeHover='1';
+      host.addEventListener('mouseenter',()=>{
+        const r=host.querySelector('.gauge-ring');if(!r)return;
+        r.style.transition='none';
+        r.style.strokeDashoffset=r.dataset.full;
+        void r.offsetWidth; // force reflow
+        r.style.transition='stroke-dashoffset 1.15s cubic-bezier(.22,.9,.3,1)';
+        r.style.strokeDashoffset=r.dataset.target;
+      });
+    }
+  }
+  // центр: число + зона + чип дельты. Группа классов transitions-dev: число
+  // въезжает pop-in-ом, подпись зоны и чип догоняют каскадом (data-stagger 1/2)
+  const gd=el('g',{class:'t-digit-group is-animating'},svg);
+  el('text',{x:50,y:49,'text-anchor':'middle',fill:col,'font-size':26,'font-weight':300,class:'t-digit',
+    style:'font-family:var(--font-data);letter-spacing:-1px'},gd).textContent=(val!=null?val:'—');
+  el('text',{x:50,y:58,'text-anchor':'middle',fill:cvar('--ink-2'),'font-size':4.6,'font-weight':600,
+    class:'t-digit','data-stagger':'1',
+    style:'letter-spacing:1.4px;text-transform:uppercase'},gd).textContent=(val==null?'':zoneName(val));
+  if(recoveryDelta!==null&&recoveryDelta!==0){
+    el('rect',{x:40,y:63,width:20,height:9.5,rx:2.5,fill:cvar('--surface-2'),stroke:cvar('--border'),
+      class:'t-digit','data-stagger':'2'},gd);
+    el('text',{x:50,y:69.6,'text-anchor':'middle',fill:recoveryDelta>0?cvar('--good'):cvar('--crit'),
+      'font-size':5,'font-weight':600,class:'t-digit','data-stagger':'2',
+      style:'font-family:var(--font-data)'},gd).textContent=(recoveryDelta>0?'↑ ':'↓ ')+fmt(Math.abs(recoveryDelta),0);
+  }
+  if(last){
+    box.insertAdjacentHTML('beforeend',
+      `<div style="margin-top:12px;font-size:var(--fs-sm);color:var(--slate);text-align:center">Morning of ${md(last.date)}${deltaLabel?' · '+deltaLabel:''}</div>`);
+    // типичный размах день-к-дню ушёл с карточки в детальный оверлей (клик по датчику):
+    // на компактном виде — только число и зона, контекст волатильности — при раскрытии
+    const rs=DATA.days.map(x=>x.recovery).filter(v=>v!=null);
+    const dd=rs.slice(1).map((v,i)=>Math.abs(v-rs[i]));
+    const vol=dd.length?Math.round(dd.reduce((a,b)=>a+b,0)/dd.length):null;
+    registerExpand({metric:'recovery',title:'Recovery',unit:'%',color:cvar('--accent-lime'),
+      values:DATA.days.map(x=>x.recovery),dates:DATA.days.map(x=>x.date),dec:0,
+      zones:RECOVERY_ZONES,period:'day',
+      note:vol!=null?`Typical day-to-day change is <b>±${vol}</b>. A single sharp move is not concerning on its own; look for a multi-day pattern.`:''});
+    if(host&&!host.dataset.expandable){
+      host.dataset.expandable='1';
+      host.classList.add('expandable');
+      host.setAttribute('data-metric','recovery');host.setAttribute('tabindex','0');
+      host.setAttribute('role','button');host.setAttribute('aria-haspopup','dialog');
+      host.setAttribute('aria-label','Recovery — open detailed chart');
+      host.insertAdjacentHTML('afterbegin',EXPAND_ICON);
+    }
+  }
+}
+
+// 2. ТАЙМЛАЙН СНА — пропорциональная полоса по стадиям + отбой/подъём + легенда
+function sleepTimeline(){
+  const box=$('#c_sleep_tl');if(!box)return;
+  const ls=DATA.latest_sleep;
+  const tag=$('#sleep_tag');
+  if(!ls){box.innerHTML='<p class="desc" style="margin:0">No sleep data for last night.</p>';if(tag)tag.textContent='';return;}
+  const st=ls.stages_ms||{};
+  // цвета стадий — токены --sleep-* из :root (макет Stitch: Awake — графит,
+  // Core — приглушённый голубой, Deep — фиолетовый, REM — яркий голубой)
+  const order=[['awake','Awake',cvar('--sleep-awake')],['light','Core',cvar('--sleep-core')],
+               ['deep','Deep',cvar('--sleep-deep')],['rem','REM',cvar('--sleep-rem')]];
+  const dur=ms=>{const m=Math.round((ms||0)/60000),h=Math.floor(m/60);return h?`${h} h ${m%60} min`:`${m} min`;};
+  const hhmm=iso=>(iso&&iso.indexOf('T')>=0)?iso.split('T')[1].slice(0,5):'—';
+  const segs=order.map(([k,nm,c])=>`<div class="sseg" style="flex:${st[k]||0};background:${c}"
+     title="${nm}: ${dur(st[k])}"></div>`).join('');
+  const legend=order.map(([k,nm,c])=>`<span class="it"><span class="sw" style="background:${c}"></span>
+     <span class="nm">${nm}</span> <span class="vl">${dur(st[k])}</span></span>`).join('');
+  box.innerHTML=`<div class="sleep-times">
+      <div class="t">${hhmm(ls.bed_local)}<small>Bedtime</small></div>
+      <div class="t" style="text-align:right">${hhmm(ls.wake_local)}<small>Wake time</small></div>
+    </div>
+    <div class="sleep-bar" role="img" aria-label="Sleep stages from last night">${segs}</div>
+    <div class="sleep-legend">${legend}</div>`;
+  if(tag)tag.textContent=`${fmt(ls.hours)} h sleep · ${ls.performance??'—'}% performance`;
+}
+
+function sleepSheetSnapshot(){
+  const days=Array.isArray(DATA.days)?DATA.days:[];
+  const reference=overviewRecoveryReference(days);
+  const currentDuration=reference&&overviewIsFiniteNumber(reference.sleep_h)&&reference.sleep_h>=0
+    ?reference.sleep_h:null;
+  const currentPerformance=reference&&overviewIsFiniteNumber(reference.sleep_perf)
+    ?reference.sleep_perf:null;
+  const durations=days.map(row=>overviewIsFiniteNumber(row.sleep_h)&&row.sleep_h>=0?row.sleep_h:null);
+  const performances=days.map(row=>overviewIsFiniteNumber(row.sleep_perf)?row.sleep_perf:null);
+  const durationValues=durations.filter(overviewIsFiniteNumber);
+  const performanceValues=performances.filter(overviewIsFiniteNumber);
+  const sampleSize=days.filter(row=>overviewIsFiniteNumber(row.sleep_h)||
+    overviewIsFiniteNumber(row.sleep_perf)).length;
+  const baselineSamples=reference?overviewLastValidMetricSamples(days,'sleep_h',7,
+    {throughDate:reference.date,excludeDate:reference.date}):[];
+  const shortMean=baselineSamples.length?overviewMean(baselineSamples.map(sample=>sample.value)):null;
+  const deltaMinutes=currentDuration===null||shortMean===null?null:(currentDuration-shortMean)*60;
+  return {days,reference,currentDuration,currentPerformance,durations,performances,
+    durationMean:overviewMean(durationValues),performanceMean:overviewMean(performanceValues),
+    sampleSize,baselineSize:baselineSamples.length,deltaMinutes};
+}
+
+function sleepSheetNote(){
+  const data=sleepSheetSnapshot();
+  const current=data.currentDuration===null?'Insufficient data':fmt(data.currentDuration,1)+' h';
+  const performance=data.currentPerformance===null?'Insufficient data':fmt(data.currentPerformance,0)+'%';
+  const delta=data.deltaMinutes===null?'':
+    ` Difference from the previous ${data.baselineSize}-observation average: <b>${data.deltaMinutes>0?'+':data.deltaMinutes<0?'−':''}${fmt(Math.abs(data.deltaMinutes),0)} min</b>.`;
+  return `Current duration: <b>${current}</b>. Sleep Performance: <b>${performance}</b>.${delta} Observations: <b>${data.sampleSize}</b>.`;
+}
+
+function renderSleepSheet(box){
+  const data=sleepSheetSnapshot();
+  const stats=box.closest('.sheet')?.querySelector('.sheet-stats');
+  const statValue=(value,dec,unit)=>value===null?'Insufficient data':
+    popNum(fmt(value,dec))+(unit?' '+unit:'');
+  if(stats){
+    stats.innerHTML=`
+      <div class="st"><span class="k">Latest duration</span><span class="v">${statValue(data.currentDuration,1,'h')}</span></div>
+      <div class="st"><span class="k">Average duration</span><span class="v">${statValue(data.durationMean,1,'h')}</span></div>
+      <div class="st"><span class="k">Latest sleep performance</span><span class="v">${statValue(data.currentPerformance,0,'%')}</span></div>
+      <div class="st"><span class="k">Average sleep performance</span><span class="v">${statValue(data.performanceMean,0,'%')}</span></div>
+      <div class="st"><span class="k">Observations</span><span class="v">${popNum(data.sampleSize)}</span></div>`;
+  }
+  detailChart({title:'Sleep duration',unit:'h',color:cvar('--accent-2'),
+    values:data.durations,dates:data.days.map(row=>row.date),dec:1,zones:null},box);
+}
+
+function loadSheetSnapshot(){
+  const days=Array.isArray(DATA.days)?DATA.days:[];
+  const reference=overviewRecoveryReference(days);
+  const previous=reference?overviewPreviousDayLoad(days,reference.date)
+    :{date:null,row:null,present:false,hasValue:false,value:null};
+  const loads=days.map(row=>overviewIsFiniteNumber(row.load)?row.load:null);
+  const validLoads=loads.filter(overviewIsFiniteNumber);
+  const baselineWindow=reference
+    ?overviewSummarizeMetricWindow(overviewCalendarWindow(days,reference.date,-8,-2),'load')
+    :null;
+  const baselineMean=baselineWindow&&baselineWindow.sufficient
+    ?baselineWindow.sum/baselineWindow.expected:null;
+  const comparison=previous.hasValue&&baselineMean!==null?previous.value-baselineMean:null;
+  const workouts=previous.present&&overviewIsFiniteNumber(previous.row.workout_count)&&
+    previous.row.workout_count>=0?previous.row.workout_count:null;
+  return {days,reference,previous,loads,validLoads,
+    mean:overviewMean(validLoads),max:validLoads.length?Math.max(...validLoads):null,
+    sampleSize:validLoads.length,baselineMean,comparison,workouts};
+}
+
+function loadSheetFormat(value){
+  return overviewIsFiniteNumber(value)
+    ?Number(value).toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:1})
+    :null;
+}
+
+function loadSheetNote(){
+  const data=loadSheetSnapshot();
+  const date=data.previous.date?md(data.previous.date):null;
+  const value=!data.previous.present?'No data'
+    :!data.previous.hasValue?'Insufficient data'
+    :loadSheetFormat(data.previous.value)+' strain';
+  const comparison=data.comparison===null?'':
+    ` Difference from the previous 7-calendar-day average: <b>${data.comparison>0?'+':data.comparison<0?'−':''}${loadSheetFormat(Math.abs(data.comparison))} strain</b>.`;
+  return `${date?'Load on '+date:'Previous-day load'}: <b>${value}</b>.${comparison} Valid days: <b>${data.sampleSize}</b>.`;
+}
+
+function renderLoadSheet(box){
+  const data=loadSheetSnapshot();
+  const stats=box.closest('.sheet')?.querySelector('.sheet-stats');
+  const strainValue=value=>value===null?'Insufficient data':popNum(loadSheetFormat(value))+' strain';
+  const previousValue=!data.previous.present?'No data'
+    :!data.previous.hasValue?'Insufficient data':strainValue(data.previous.value);
+  const workouts=!data.previous.present?'No data'
+    :data.workouts===null?'Insufficient data':popNum(data.workouts);
+  if(stats){
+    stats.innerHTML=`
+      <div class="st"><span class="k">Previous-day load</span><span class="v">${previousValue}</span></div>
+      <div class="st"><span class="k">Period average</span><span class="v">${strainValue(data.mean)}</span></div>
+      <div class="st"><span class="k">Maximum</span><span class="v">${strainValue(data.max)}</span></div>
+      <div class="st"><span class="k">Valid days</span><span class="v">${popNum(data.sampleSize)}</span></div>
+      <div class="st"><span class="k">Previous-day activities</span><span class="v">${workouts}</span></div>`;
+  }
+  detailChart({title:'Daily load',unit:'strain',color:cvar('--accent'),
+    values:data.loads,dates:data.days.map(row=>row.date),dec:1,zones:null},box);
+}
+
+// 2b. ИСТОРИЯ АРХИТЕКТУРЫ СНА — стек стадий по всем ночам + порог 7 ч.
+// Добавлено по данным: глубокий сон почти константа (~2.1 ± 0.2 ч), ночь
+// «ломается» за счёт REM и общей длительности — по одной последней ночи
+// (капсула выше) этого не видно вообще.
+function sleepHistory(){
+  const box=$('#c_sleep_hist');if(!box)return;
+  const nights=DATA.sleep_nights||[];
+  if(nights.length<5){box.innerHTML='';return;}
+  box.innerHTML='';
+  const W=Math.max(620,nights.length*22+70),H=210,mL=36,mR=14,mT=16,mB=36;
+  const iw=W-mL-mR,ih=H-mT-mB;
+  const maxH=Math.max(9,Math.ceil(Math.max(...nights.map(n=>n.hours))+0.5));
+  const wrap=document.createElement('div');wrap.className='chart';box.appendChild(wrap);
+  const svg=mkSVG(W,H);wrap.appendChild(svg);
+  const geo={svg,W,mL,mR,mT,ih};
+  gridY(geo,{max:maxH});
+  axisLines(geo);
+  const bw=iw/nights.length,bar=Math.min(13,bw*0.62);
+  const Yh=h=>mT+ih-ih*h/maxH;
+  nights.forEach((n,i)=>{
+    const cx=mL+bw*i+bw/2;let y=mT+ih;
+    [['deep_h','--sleep-deep'],['light_h','--sleep-core'],['rem_h','--sleep-rem']].forEach(([k,c])=>{
+      const h=ih*(n[k]||0)/maxH;if(h<=0)return;y-=h;
+      el('rect',{x:cx-bar/2,y,width:bar,height:h,fill:cvar(c),rx:1.5},svg);
+    });
+    const hit=el('rect',{x:cx-bw/2,y:mT,width:bw,height:ih,fill:'transparent'},svg);
+    bindTip(hit,`<div class="tth">Night of ${md(n.date)}</div>
+      <div class="ttr">Total: <b>${fmt(n.hours)} h</b>${n.perf!=null?' · performance '+n.perf+'%':''}</div>
+      <div class="ttr">Deep ${fmt(n.deep_h)} · REM ${fmt(n.rem_h)} · Core ${fmt(n.light_h)}</div>`);
+  });
+  // линия порога 7 ч: ниже неё recovery в этих данных систематически проседает
+  el('line',{x1:mL,x2:W-mR,y1:Yh(7),y2:Yh(7),stroke:cvar('--accent-2'),'stroke-width':1,
+    'stroke-dasharray':'4 4',opacity:.6},svg);
+  el('text',{x:W-mR,y:Yh(7)-5,'text-anchor':'end',class:'axlbl',fill:cvar('--accent-2')},svg).textContent='7 h threshold';
+  xDateLabels(geo,nights,i=>mL+bw*i+bw/2,4);
+  const lg=document.createElement('div');lg.className='legend';
+  lg.innerHTML=`<span class="it"><span class="sw" style="background:var(--sleep-deep)"></span>Deep</span>
+    <span class="it"><span class="sw" style="background:var(--sleep-core)"></span>Core</span>
+    <span class="it"><span class="sw" style="background:var(--sleep-rem)"></span>REM</span>
+    <span class="it"><span class="sw line" style="background:var(--accent-2)"></span>7 h threshold</span>`;
+  wrap.appendChild(lg);
+  // Общий Sleep sheet регистрируется один раз в fillHeader(); здесь обновляется
+  // только его короткая нейтральная note после рендера sleep-specific блока.
+  if(EXPAND_SPECS.sleep){
+    EXPAND_SPECS.sleep.note=sleepSheetNote();
+  }
+}
+
+// 3+4. ОБЗОР: чип готовности, тренды-спарклайны, датчик, таймлайн, доп. метрики
+function fillOverview(){
+  const s=DATA.summary,D=DATA.days;
+  const lastOf=key=>[...D].reverse().find(x=>x[key]!=null);
+  const last=lastOf('recovery');
+  const dDates=D.map(x=>x.date);
+  if(last){
+    const zt=last.recovery>=67?'Peak readiness':last.recovery>=34?'Moderate readiness':'Recovery mode';
+    const zc=zoneColor(last.recovery);
+    $('#hero_verdict').innerHTML=`<span class="dot" style="background:${zc};color:${zc}"></span><span class="lbl">${zt}</span>`;
+    $('#hero_sub').innerHTML=`Morning of <b>${md(last.date)}</b>. Recovery ${last.recovery}%`
+      +(last.sleep_h!=null?`, sleep ${fmt(last.sleep_h)} h`:'')
+      +(last.hrv!=null?`, HRV ${fmt(last.hrv,0)} ms`:'')+'.';
+    const verdict=$('#hero_verdict');
+    if(!$('#hero_score'))verdict.insertAdjacentHTML('beforebegin','<div class="hero-score" id="hero_score"></div>');
+    $('#hero_score').innerHTML=`<div class="score" style="color:${zc}">${popNum(last.recovery)}<small>%</small></div><span class="score-label">Today’s Recovery</span>`;
+    const hero=$('.ov-hero');
+    if(!$('#hero_meta'))hero.insertAdjacentHTML('beforeend','<div class="hero-meta" id="hero_meta"></div>');
+    $('#hero_meta').innerHTML=`<span>Period <b>${s.n_days} days</b></span>`
+      +`<span>Activities <b>${s.n_workouts}</b></span>`
+      +`<span>Volume <b>${fmt(s.total_hours)} h</b></span>`
+      +`<span>Average Recovery <b>${fmt(s.avg_recovery,0)}%</b></span>`;
+  }
+  // «Биометрические тренды»: HRV + пульс покоя.
+  const lastRhr=lastOf('resting_hr'),lastHrv=lastOf('hrv');
+  $('#trend_sub').textContent=`Last ${D.length} days`+(last?` · through ${md(last.date)}`:'');
+  // выводы (r HRV↔recovery, стабильность RHR) считаются здесь, но на компактном
+  // виде не показываются — уходят в spec и появляются в детальном оверлее по клику
+  const hrvRecR=pearsonJS(D.map(x=>[x.hrv,x.recovery]));
+  const rhrVals=D.map(x=>x.resting_hr).filter(v=>v!=null);
+  const trendRow=({metric,k,value,unit,series,color,dec,note})=>{
+    registerExpand({metric,title:k,unit,color,values:series,dates:dDates,dec,zones:null,period:'day',note});
+    return `<div class="trend-row" data-metric="${metric}" tabindex="0" role="button" aria-haspopup="dialog" aria-label="${k} — open detailed chart">
+      ${EXPAND_ICON}
+      <div class="trh">
+        <span class="microlabel">${k}</span>
+        <div class="trv" style="color:${color}">${popNum(value)}<small>${unit}</small></div>
+      </div>
+      <div class="trend-plot">
+        <div class="grid3"><i></i><i></i><i></i></div>
+        ${spark(series,color,60)}
+      </div>
+    </div>`;
+  };
+  $('#trend_rows').innerHTML=
+     trendRow({metric:'hrv',k:'HRV',value:lastHrv?fmt(lastHrv.hrv,0):'—',unit:'ms',
+       series:D.map(x=>x.hrv),dec:0,color:cvar('--accent-lime'),
+       note:hrvRecR!=null?`HRV closely tracks Recovery (r <b>${fmt(hrvRecR,2)}</b>), making it a useful leading signal.`:''})
+    +trendRow({metric:'rhr',k:'Resting HR',
+       value:last&&overviewIsFiniteNumber(last.resting_hr)?fmt(last.resting_hr,0):'—',unit:'bpm',
+       series:D.map(x=>x.resting_hr),dec:0,color:cvar('--ink')});
+  gaugeRecovery();
+  sleepTimeline();
+  sleepHistory();
+  const signedMetric=value=>{
+    if(!overviewIsFiniteNumber(value))return null;
+    const rounded=Math.round(value),sign=rounded>0?'+':rounded<0?'−':'';
+    return sign+Math.abs(rounded);
+  };
+  const loadWindows=last?overviewLoadWindows(D,last.date):null;
+  const loadReady=!!loadWindows&&loadWindows.current.sufficient;
+  const loadComparison=loadReady&&loadWindows.previous.sufficient
+    ?signedMetric(loadWindows.comparison.percentage):null;
+  miniCard($('#mini_rhr'),{k:'7-day load',
+    value:loadReady?fmt(loadWindows.current.sum,1):'Insufficient data',unit:loadReady?'strain':'',
+    series:loadReady?loadWindows.current.entries.map(entry=>entry.row.load):[],color:cvar('--accent'),
+    trend:loadComparison===null?null:{txt:loadComparison+'%',base:'vs prior week'}});
+
+  const activeCurrent=last?overviewActiveDays(D,last.date):null;
+  const activePrevious=last?overviewActiveDays(D,last.date,-14,-8):null;
+  const activeReady=!!activeCurrent&&activeCurrent.sufficient;
+  const activeDelta=activeReady&&activePrevious.sufficient
+    ?signedMetric(activeCurrent.activeDays-activePrevious.activeDays):null;
+  miniCard($('#mini_load'),{k:'Active days · last 7',value:'',
+    valueHtml:activeReady
+      ?popNum(activeCurrent.activeDays)+'<small> of 7</small>'
+      :'Insufficient data',
+    series:activeReady?activeCurrent.entries.map(entry=>entry.row.workout_count):[],color:cvar('--accent-lime'),
+    trend:activeReady?{
+      txt:activeCurrent.workoutCount+' '+(activeCurrent.workoutCount===1?'activity':'activities'),
+      base:activeDelta===null?'':activeDelta+' '+(Math.abs(activeCurrent.activeDays-activePrevious.activeDays)===1?'day':'days')+' vs prior week',
+      color:cvar('--ink-2')}:null});
+
+  const sleepConsistency=last?overviewSleepConsistency(DATA.sleep_nights,last.date):null;
+  const previousSleepConsistency=last
+    ?overviewSleepConsistency(DATA.sleep_nights,last.date,{startOffset:-13,endOffset:-7,minSamples:4}):null;
+  const consistencyReady=!!sleepConsistency&&sleepConsistency.sufficient;
+  const consistencyDelta=consistencyReady&&previousSleepConsistency.sufficient
+    ?signedMetric(sleepConsistency.minutes-previousSleepConsistency.minutes):null;
+  miniCard($('#mini_recweek'),{k:'Sleep Consistency',value:'',
+    valueHtml:consistencyReady
+      ?'±'+popNum(sleepConsistency.minutes)+'<small> min</small>'
+      :'Insufficient data',
+    series:consistencyReady?sleepConsistency.samples.map(sample=>sample.minutes):[],color:cvar('--accent-2'),
+    trend:consistencyDelta===null?null:{txt:consistencyDelta+' min',base:'vs prior week'}});
+}
+
+// ============ ДЕТАЛЬНЫЙ ГРАФИК (внутри оверлея) ============
+// Полноценная версия sparkline: оси X/Y с подписями, сетка, точки+тултип,
+// линия тренда, area-градиент и опциональные смысловые зоны. Универсально по spec.
+function detailChart(spec,box){
+  box.innerHTML='';
+  const W=Math.max(320,box.clientWidth||640),H=300,mL=46,mR=18,mT=16,mB=44;
+  const iw=W-mL-mR,ih=H-mT-mB;
+  const dates=spec.dates||spec.values.map((_,i)=>String(i));
+  const pts=spec.values.map((v,i)=>({v,date:dates[i],i}));
+  const known=pts.filter(p=>p.v!=null);
+  if(known.length<2){box.innerHTML='<p class="desc" style="margin:0">Insufficient data for a detailed chart.</p>';return;}
+  const n=pts.length,X=i=>mL+iw*i/(n-1);
+  let y0,y1;
+  if(spec.zones){y0=0;y1=100;}
+  else{const vs=known.map(p=>p.v);let mn=Math.min(...vs),mx=Math.max(...vs);
+    const pad=(mx-mn)*0.14||Math.max(1,Math.abs(mx)*0.1);
+    y0=Math.max(0,mn-pad);y1=mx+pad;if(y0===y1)y1=y0+1;}
+  const Y=v=>mT+ih-ih*(v-y0)/(y1-y0);
+  const svg=mkSVG(W,H);box.appendChild(svg);
+  const uid='dx'+Math.random().toString(36).slice(2,7);
+  const defs=el('defs',{},svg);
+  const g=el('linearGradient',{id:uid,x1:0,y1:0,x2:0,y2:1},defs);
+  el('stop',{offset:'0%','stop-color':spec.color,'stop-opacity':0.22},g);
+  el('stop',{offset:'100%','stop-color':spec.color,'stop-opacity':0},g);
+  // смысловые зоны
+  if(spec.zones)spec.zones.forEach(([lo,hi,c])=>{el('rect',{x:mL,y:Y(hi),width:iw,height:Y(lo)-Y(hi),
+    fill:cvar(c),opacity:0.12},svg);});
+  // сетка + подписи Y
+  const geo={svg,W,mL,mR,mT,ih};
+  gridY(geo,{min:y0,max:y1,fmtV:v=>fmt(v,spec.dec)});
+  axisLines(geo,true);
+  // подписи X (даты)
+  xDateLabels(geo,pts,X,Math.max(1,Math.round(n/7)));
+  // area + линия
+  let lp='';known.forEach((p,k)=>{lp+=(k?'L':'M')+X(p.i).toFixed(1)+' '+Y(p.v).toFixed(1)+' ';});
+  el('path',{d:lp+`L ${X(known[known.length-1].i)} ${mT+ih} L ${X(known[0].i)} ${mT+ih} Z`,fill:'url(#'+uid+')'},svg);
+  // линия тренда (холодный пунктир, тоньше)
+  const reg=linReg(known.map(p=>[p.i,p.v]));
+  if(reg)trendDash(geo,[X(0),Y(reg.b),X(n-1),Y(reg.m*(n-1)+reg.b)]);
+  el('path',{d:lp,fill:'none',stroke:spec.color,'stroke-width':2.6,'stroke-linejoin':'round','stroke-linecap':'round'},svg);
+  // Тот же shared interaction, что и в «Recovery по дням»: tooltip привязан
+  // к видимой точке; расширенная SVG hit-область только помогает touch/focus.
+  known.forEach(p=>{const dc=spec.zones?zoneColor(p.v):spec.color;
+    const pointLabel=`${md(p.date)}: ${spec.title} ${fmt(p.v,spec.dec)}${spec.unit?' '+spec.unit:''}`;
+    const tip=`<div class="tth">${md(p.date)}</div>
+      <div class="ttr">${spec.title}: <b>${fmt(p.v,spec.dec)}</b>${spec.unit?' '+spec.unit:''}${spec.zones?' ('+zoneName(p.v)+')':''}</div>`;
+    const point=el('circle',{cx:X(p.i),cy:Y(p.v),r:6.5,fill:dc,stroke:cvar('--surface'),'stroke-width':2.5,class:'hoverable','aria-label':pointLabel},svg);
+    bindTip(point,tip);
+    const hit=el('circle',{cx:X(p.i),cy:Y(p.v),r:16,fill:'transparent','pointer-events':'all',class:'detail-chart-hit','aria-label':pointLabel},svg);
+    bindTip(hit,tip,{focusable:true});});
+}
+function plural(n,one,few,many){const a=Math.abs(n)%100,b=a%10;
+  if(a>10&&a<20)return many;if(b>1&&b<5)return few;if(b===1)return one;return many;}
+function statRow(spec){const vs=spec.values.filter(v=>v!=null);
+  return {mean:vs.reduce((a,b)=>a+b,0)/vs.length,min:Math.min(...vs),max:Math.max(...vs),n:vs.length};}
+
+// ---- модальный оверлей: FLIP-раскрытие из карточки, focus-trap, Escape/фон/крестик ----
+let _shPrevFocus=null,_shCard=null;
+const reduceMotion=()=>matchMedia('(prefers-reduced-motion:reduce)').matches;
+function openSheet(metric,cardEl){
+  if($('#sheet_bd'))return;
+  const spec=EXPAND_SPECS[metric];if(!spec)return;
+  const reduce=reduceMotion();
+  _shPrevFocus=document.activeElement;_shCard=cardEl;
+  const st=statRow(spec),len=spec.values.filter(v=>v!=null).length;
+  const hasStats=len>0; // текстовые sheet-спеки (напр. отчёт «Образ жизни») без чисел
+  const per=spec.perLabel||(spec.period==='week'
+    ? `last ${spec.values.length} ${spec.values.length===1?'week':'weeks'}`
+    : `last ${spec.values.length} ${spec.values.length===1?'day':'days'}`);
+  const u=spec.unit?' '+spec.unit:'';
+  const bd=document.createElement('div');bd.className='sheet-backdrop';bd.id='sheet_bd';bd._metric=metric;
+  // числа статистики — pop-in; аннотация-вывод (если есть у метрики) стартует
+  // скрытой (panel reveal) и въезжает после FLIP-раскрытия панели
+  bd.innerHTML=`<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet_title">
+    <button class="sheet-x" aria-label="Close">${ticon('x',18)}</button>
+    <div class="sheet-head">
+      <h3 id="sheet_title">${spec.title} <span>— ${per}</span></h3>
+      ${hasStats?`<div class="sheet-stats">
+        <div class="st"><span class="k">Average</span><span class="v">${popNum(fmt(st.mean,spec.dec))}${u}</span></div>
+        <div class="st"><span class="k">Minimum</span><span class="v">${popNum(fmt(st.min,spec.dec))}${u}</span></div>
+        <div class="st"><span class="k">Maximum</span><span class="v">${popNum(fmt(st.max,spec.dec))}${u}</span></div>
+      </div>`:''}
+    </div>
+    <div class="sheet-chart" id="sheet_chart"></div>
+    ${spec.note?`<p class="data-note t-panel-slide" data-open="false" id="sheet_note">${spec.note}</p>`:''}
+  </div>`;
+  document.body.appendChild(bd);
+  bd.dataset.previousOverflow=document.body.style.overflow;
+  document.body.style.overflow='hidden';
+  const sheet=bd.querySelector('.sheet');
+  if(spec.render)spec.render(bd.querySelector('#sheet_chart'));
+  else detailChart(spec,bd.querySelector('#sheet_chart'));
+  const sn=bd.querySelector('#sheet_note');
+  if(sn)setTimeout(()=>sn.setAttribute('data-open','true'),reduce?0:200);
+  // FLIP: панель «вырастает» из позиции/размера карточки. Начальное состояние
+  // коммитим через принудительный reflow (не rAF) — иначе при неактивной вкладке
+  // rAF тормозится и панель зависает свёрнутой; финал ставим синхронно.
+  if(!reduce&&cardEl){
+    const f=cardEl.getBoundingClientRect(),l=sheet.getBoundingClientRect();
+    const sx=Math.max(.08,f.width/l.width),sy=Math.max(.08,f.height/l.height);
+    sheet.style.transformOrigin='top left';
+    sheet.style.transform=`translate(${f.left-l.left}px,${f.top-l.top}px) scale(${sx},${sy})`;
+    sheet.style.opacity='.5';bd.style.opacity='0';
+    void sheet.offsetHeight;            // reflow — фиксируем стартовое состояние
+    bd.style.transition='opacity .28s ease';
+    sheet.style.transition='transform .44s cubic-bezier(.34,1.28,.5,1),opacity .3s ease';
+    sheet.style.transform='none';sheet.style.opacity='1';bd.style.opacity='1';
+  }
+  const close=()=>closeSheet();
+  bd.addEventListener('mousedown',e=>{if(e.target===bd)close();});
+  bd.querySelector('.sheet-x').addEventListener('click',close);
+  bd.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){e.preventDefault();close();}
+    else if(e.key==='Tab'){const f=sheet.querySelectorAll('a[href],button,input,select,textarea,[tabindex]:not([tabindex="-1"])');
+      if(!f.length)return;const a=f[0],z=f[f.length-1];
+      if(e.shiftKey&&document.activeElement===a){e.preventDefault();z.focus();}
+      else if(!e.shiftKey&&document.activeElement===z){e.preventDefault();a.focus();}}
+  });
+  const x=bd.querySelector('.sheet-x');setTimeout(()=>x.focus(),reduce?0:60);
+  addEventListener('resize',_shResize);
+}
+function _shResize(){const bd=$('#sheet_bd');if(!bd)return;const sp=EXPAND_SPECS[bd._metric];
+  if(!sp)return;const box=bd.querySelector('#sheet_chart');
+  if(sp.render)sp.render(box);else detailChart(sp,box);}
+function closeSheet(){
+  const bd=$('#sheet_bd');if(!bd)return;
+  removeEventListener('resize',_shResize);
+  const finish=()=>{document.body.style.overflow=bd.dataset.previousOverflow||'';bd.remove();hideTT();
+    if(window.syncDashboardModalIsolation)window.syncDashboardModalIsolation();
+    if(_shPrevFocus&&_shPrevFocus.focus)_shPrevFocus.focus();};
+  if(reduceMotion()||!_shCard){finish();return;}
+  const sheet=bd.querySelector('.sheet');
+  const f=_shCard.getBoundingClientRect(),l=sheet.getBoundingClientRect();
+  const sx=Math.max(.08,f.width/l.width),sy=Math.max(.08,f.height/l.height);
+  sheet.style.transformOrigin='top left';
+  sheet.style.transition='transform .34s cubic-bezier(.4,0,.6,1),opacity .3s ease';
+  sheet.style.transform=`translate(${f.left-l.left}px,${f.top-l.top}px) scale(${sx},${sy})`;
+  sheet.style.opacity='0';bd.style.transition='opacity .3s ease';bd.style.opacity='0';
+  setTimeout(finish,340);
+}
+// делегированные слушатели (навешиваются один раз; карточки пересоздаются при рендере панели)
+document.addEventListener('click',e=>{const c=e.target.closest('[data-metric]');if(c)openSheet(c.dataset.metric,c);});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){
+  const c=e.target.closest('[data-metric]');if(c&&document.activeElement===c){e.preventDefault();openSheet(c.dataset.metric,c);}}});
+
+// ---------- ленивый рендер по вкладкам ----------
+// Панель строится при первом открытии; на resize пересобирается только видимая,
+// остальные помечаются «грязными» и перестроятся при следующем открытии.
+// Новый график = функция-рендерер + одна запись в реестре своей панели.
+const PANEL_RENDER={
+  overview:[fillHeader,fillOverview],
+  analytics:[chartWeekly,chartRecovery,chartLoad,chartConnections],
+  insights:[heatmapCalendar,chartDow,fillInsights,fillLifestyle],
+  workouts:[rankRecords,chartProgress,renderManualWorkouts,renderCardioExercises,renderSupplementsLog],
+};
+const panelDirty={overview:true,analytics:true,insights:true,workouts:true};
+let activeTab='overview';
+function renderPanel(name){
+  if(!PANEL_RENDER[name])return;
+  if(name==='insights')hmSelected=null;   // сброс подсветки heatmap при перерисовке
+  PANEL_RENDER[name].forEach(f=>f());
+  panelDirty[name]=false;
+}
+// статические элементы вне панелей — один раз при загрузке
+$('#daterange').textContent=`${md(DATA.summary.date_start)} — ${md(DATA.summary.date_end)}`;
+$('#foot').textContent=`WHOOP data · ${DATA.summary.n_workouts} activities, ${DATA.days.length} days · rebuilt from data/whoop.db${DATA.generated_at?' · '+DATA.generated_at:''}`;
+
+// ---------- tab navigation (show/hide panels, hash deep-link) ----------
+const overviewSectionHeadings=[...document.querySelectorAll('#panel-overview .section-heading')];
+if(overviewSectionHeadings[0]){overviewSectionHeadings[0].querySelector('h2').textContent='Period signals';overviewSectionHeadings[0].querySelector('p').textContent='Volume, load, and Recovery distribution';}
+if(overviewSectionHeadings[1]){overviewSectionHeadings[1].querySelector('h2').textContent='System state';overviewSectionHeadings[1].querySelector('p').textContent='Select a metric to open its detailed chart';}
+[['analytics','Trends','Recovery, sleep, and load trends focused on durable change rather than isolated fluctuations.'],['insights','Factors','Recovery patterns, weekly rhythm, and observed relationships between sleep, load, and readiness.'],['workouts','Activity','WHOOP activities, strength logs, cardio, and supplements in one verifiable history.']].forEach(([id,title,copy])=>{
+  const intro=document.querySelector(`#panel-${id} .panel-intro`);if(!intro)return;
+  intro.querySelector('h1').textContent=title;intro.querySelector('p').textContent=copy;
+});
+const TABS=['overview','analytics','insights','workouts'];
+// transitions-dev: physical hover for the compact tab group.
+const tabRoot=$('#tabs');
+const tabMotionItems=[...tabRoot.querySelectorAll('.tab')];
+tabRoot.classList.add('t-avatar-group');
+tabMotionItems.forEach(item=>item.classList.add('t-avatar'));
+const motionCS=getComputedStyle(document.documentElement);
+const motionNum=(name,fallback)=>{const value=parseFloat(motionCS.getPropertyValue(name));return Number.isFinite(value)?value:fallback;};
+const motionEase=(name,fallback)=>motionCS.getPropertyValue(name).trim()||fallback;
+function setTabMotion(activeIndex,phase){
+  const lift=motionNum('--avatar-lift',-2);
+  const falloff=motionNum('--avatar-falloff',.35);
+  const scale=motionNum('--avatar-scale',1.018);
+  const timing=phase==='out'
+    ?motionEase('--avatar-ease-out','cubic-bezier(0.34,3.85,0.64,1)')
+    :motionEase('--avatar-ease-in','cubic-bezier(0.22,1,0.36,1)');
+  tabMotionItems.forEach((item,index)=>{
+    item.style.transitionTimingFunction=timing;
+    const distance=activeIndex==null?0:Math.abs(index-activeIndex);
+    item.style.setProperty('--shift',activeIndex==null?'0px':(lift*Math.pow(falloff,distance)).toFixed(3)+'px');
+    item.style.setProperty('--scale-active',activeIndex===index?String(scale):'1');
+  });
+}
+tabMotionItems.forEach((item,index)=>item.addEventListener('mouseenter',()=>setTabMotion(index,'in')));
+tabRoot.addEventListener('mouseleave',()=>setTabMotion(null,'out'));
+document.querySelectorAll('.panel').forEach(panel=>{
+  panel.classList.add('t-panel-slide');
+  panel.setAttribute('data-open','false');
+});
+function showTab(name){
+  if(!TABS.includes(name))name='overview';
+  document.querySelectorAll('.panel').forEach(p=>p.hidden=(p.dataset.panel!==name));
+  const panels=[...document.querySelectorAll('.panel')];
+  panels.forEach(panel=>panel.setAttribute('data-open','false'));
+  const currentPanel=panels.find(panel=>panel.dataset.panel===name);
+  if(currentPanel){
+    void currentPanel.offsetHeight;
+    requestAnimationFrame(()=>currentPanel.setAttribute('data-open','true'));
+  }
+  document.querySelectorAll('.tab').forEach(t=>{
+    const on=t.dataset.tab===name;
+    t.classList.toggle('active',on);
+    t.setAttribute('aria-selected',on?'true':'false');
+  });
+  activeTab=name;
+  if(panelDirty[name])renderPanel(name);
+  try{history.replaceState(null,'','#'+name);}catch(e){location.hash=name;}
+  scrollTo(0,0);
+}
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>showTab(t.dataset.tab)));
+addEventListener('hashchange',()=>showTab((location.hash||'').replace('#','')));
+showTab((location.hash||'').replace('#','')||'overview');
+
+// ---------- segmented controls (period / metric pills) ----------
+// Смена данных — не мгновенная замена, а crossfade: призрак старого графика
+// плавно тает и уплывает вверх, новый появляется снизу (chartIn). При
+// prefers-reduced-motion переключение остаётся мгновенным.
+function swapChart(box,render){
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const old=box.querySelector('svg');
+  if(reduce||!old){render();return;}
+  const ghost=old.cloneNode(true);
+  render();
+  const neo=box.querySelector('svg');
+  if(!neo)return;
+  neo.style.animation='chartIn .34s cubic-bezier(.34,1.2,.5,1) both';
+  if(getComputedStyle(box).position==='static')box.style.position='relative';
+  ghost.style.cssText+=';position:absolute;left:0;top:0;pointer-events:none;';
+  box.appendChild(ghost);
+  requestAnimationFrame(()=>{
+    ghost.style.transition='opacity .3s ease,transform .3s ease';
+    ghost.style.opacity='0';ghost.style.transform='translateY(-6px)';
+  });
+  setTimeout(()=>ghost.remove(),360);
+}
+document.querySelectorAll('.seg').forEach(seg=>{
+  seg.addEventListener('click',e=>{
+    const b=e.target.closest('button');if(!b)return;
+    seg.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
+    const chart=seg.dataset.chart,val=b.dataset.val;
+    if(chart==='recovery'){recoveryRange=(val==='all')?'all':+val;swapChart($('#c_recovery'),chartRecovery);}
+    else if(chart==='weekly'){weeklyMetric=val;swapChart($('#c_weekly'),chartWeekly);}
+  });
+});
+
+// Obsidian Performance — единая тёмная тема (система задаёт dark), переключателя нет.
+// resize: пересобираем только видимую панель, остальные — при следующем открытии
+addEventListener('resize',()=>{clearTimeout(window._rz);window._rz=setTimeout(()=>{
+  Object.keys(panelDirty).forEach(k=>panelDirty[k]=true);
+  renderPanel(activeTab);
+},180);});
+
+// ---------- Activity rendering (manual workouts / cardio / supplements) ----------
+// Activity-поля приходят из ручных Telegram-логов пользователя (не из WHOOP API),
+// поэтому считаются untrusted input: собираются через DOM API + textContent,
+// НЕ через innerHTML со строковой подстановкой.
+function activityMakeEl(tag,opts){
+  const node=document.createElement(tag);
+  if(opts){
+    if(opts.css)node.style.cssText=opts.css;
+    if(opts.text!=null)node.textContent=String(opts.text);
+  }
+  return node;
+}
+// Tabler-иконка через DOM API (без innerHTML — activity-зона рендерит
+// недоверенные ручные логи, и весь её код держит textContent-дисциплину).
+function activityTablerIcon(name,size=15){
+  const svg=document.createElementNS(SVGNS,'svg');
+  svg.setAttribute('width',size);svg.setAttribute('height',size);
+  svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('fill','none');
+  svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.7');
+  svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');
+  svg.setAttribute('aria-hidden','true');
+  (TICON_PATHS[name]||[]).forEach(d=>{
+    const path=document.createElementNS(SVGNS,'path');
+    path.setAttribute('d',d);svg.appendChild(path);
+  });
+  return svg;
+}
+function activityFiniteNumber(value){
+  return typeof value==='number'&&Number.isFinite(value)?value:null;
+}
+function activityText(value){
+  return typeof value==='string'&&value.length?value:'';
+}
+function activityGroupByDate(list){
+  const groups={};
+  (Array.isArray(list)?list:[]).forEach(item=>{
+    const date=activityText(item&&item.date);
+    if(!date)return;
+    (groups[date]=groups[date]||[]).push(item);
+  });
+  return groups;
+}
+function activityEmptyState(container,message){
+  container.textContent='';
+  container.appendChild(activityMakeEl('p',{css:'padding:10px;color:var(--muted)',text:message}));
+}
+// Общий каркас <details><summary>заголовок · итог</summary><ul>...</ul></details>
+function activityDetailsShell({icon,leftText,rightText,rightColor}){
+  const details=activityMakeEl('details',{css:'border:1px solid var(--border);border-radius:12px;margin-bottom:12px;overflow:hidden;background:rgba(255,255,255,0.01);'});
+  const summary=activityMakeEl('summary',{css:'padding:14px 20px;cursor:pointer;user-select:none;font-family:var(--font-display);font-size:var(--fs-md2);font-weight:var(--fw-medium);color:var(--ink);display:flex;justify-content:space-between;align-items:center;'});
+  // icon — ключ Tabler-реестра; строим SVG через DOM API, сохраняя запрет
+  // на innerHTML во всей activity-зоне (данные приходят из ручных логов).
+  const main=activityMakeEl('span',{css:'display:inline-flex;align-items:center;gap:8px;min-width:0;'});
+  const iconWrap=activityMakeEl('span',{css:'display:inline-flex;color:var(--muted);flex:0 0 auto;'});
+  iconWrap.appendChild(activityTablerIcon(icon,15));
+  main.appendChild(iconWrap);
+  main.appendChild(activityMakeEl('span',{text:leftText}));
+  summary.appendChild(main);
+  summary.appendChild(activityMakeEl('span',{css:`font-size:var(--fs-base);color:${rightColor};`,text:rightText}));
+  const body=activityMakeEl('div',{css:'padding:16px 20px;border-top:1px solid var(--border);background:rgba(0,0,0,0.15);'});
+  const ul=activityMakeEl('ul',{css:'margin:0;padding-left:20px;color:var(--ink-2);line-height:var(--lh-relaxed);'});
+  body.appendChild(ul);
+  details.appendChild(summary);details.appendChild(body);
+  return {details,ul};
+}
+function activityRenderGroups(container,list,{emptyMessage,icon,summarize,renderItem,renderItems}){
+  const items=Array.isArray(list)?list:[];
+  if(items.length===0){activityEmptyState(container,emptyMessage);return;}
+  const groups=activityGroupByDate(items);
+  const dates=Object.keys(groups).sort().reverse();
+  if(dates.length===0){activityEmptyState(container,emptyMessage);return;}
+  const frag=document.createDocumentFragment();
+  dates.forEach(date=>{
+    const dayItems=groups[date];
+    const {details,ul}=activityDetailsShell({icon,...summarize(date,dayItems)});
+    // renderItems (plural) owns the whole <ul> for a day (e.g. grouping several
+    // rows into one line); renderItem stays the simple one-row-per-item path.
+    if(renderItems){renderItems(ul,dayItems);}
+    else{dayItems.forEach(item=>ul.appendChild(renderItem(item)));}
+    frag.appendChild(details);
+  });
+  container.textContent='';
+  container.appendChild(frag);
+}
+
+function renderManualWorkouts(){
+  const container=$('#manual_workouts_container');
+  if(!container)return;
+  const idOf=x=>{const v=activityFiniteNumber(x.id);return v==null?0:v;};
+  activityRenderGroups(container,DATA.manual_workouts,{
+    emptyMessage:'No strength-training entries yet.',
+    icon:'strength',
+    summarize:(date,items)=>{
+      const exCount=new Set(items.map(x=>(activityText(x.exercise_name)||'—'))).size;
+      const totalVolume=Math.round(items.reduce((acc,x)=>acc+(activityFiniteNumber(x.volume)||0),0));
+      return {leftText:`${md(date)} — ${exCount} exercises · ${items.length} sets`,
+              rightText:`${totalVolume} kg volume`,rightColor:'var(--accent-lime)'};
+    },
+    // One <li> per exercise: all sets of a movement grouped on a single line,
+    // in the order they were logged (by row id). Never splits one exercise
+    // across lines or mixes exercises together.
+    renderItems:(ul,items)=>{
+      const byExercise=new Map();
+      items.forEach(w=>{
+        const name=activityText(w.exercise_name)||'—';
+        if(!byExercise.has(name))byExercise.set(name,[]);
+        byExercise.get(name).push(w);
+      });
+      const ordered=[...byExercise.entries()].sort(
+        (a,b)=>Math.min(...a[1].map(idOf))-Math.min(...b[1].map(idOf)));
+      ordered.forEach(([name,sets])=>{
+        sets.sort((a,b)=>idOf(a)-idOf(b));
+        const li=activityMakeEl('li',{css:'margin-bottom:8px;'});
+        li.appendChild(activityMakeEl('strong',{text:name}));
+        const weights=sets.map(s=>activityFiniteNumber(s.weight));
+        const sameWeight=weights.every(w=>w===weights[0])&&weights[0]!=null;
+        let line;
+        if(sameWeight){
+          const reps=sets.map(s=>{const r=activityFiniteNumber(s.reps);return r!=null?r:'—';});
+          line=` — ${weights[0]} kg: ${reps.join(', ')} reps`;
+        }else{
+          const parts=sets.map(s=>{
+            const w=activityFiniteNumber(s.weight),r=activityFiniteNumber(s.reps);
+            return `${w!=null?w:'—'}×${r!=null?r:'—'}`;
+          });
+          line=`: ${parts.join(', ')}`;
+        }
+        li.appendChild(document.createTextNode(line));
+        const totalVol=Math.round(sets.reduce((a,s)=>a+(activityFiniteNumber(s.volume)||0),0));
+        li.appendChild(document.createTextNode(' '));
+        li.appendChild(activityMakeEl('span',{
+          css:'font-size:var(--fs-sm2);color:var(--slate);',
+          text:`(${sets.length} sets · ${totalVol} kg)`}));
+        ul.appendChild(li);
+      });
+    }
+  });
+}
+
+function renderSupplementsLog(){
+  const container=$('#supplements_log_container');
+  if(!container)return;
+  activityRenderGroups(container,DATA.supplements_log,{
+    emptyMessage:'No supplement entries yet.',
+    icon:'capsule',
+    summarize:(date,items)=>({leftText:md(date),rightText:`${items.length} ${items.length===1?'supplement':'supplements'}`,rightColor:'var(--accent-2)'}),
+    renderItem:s=>{
+      const li=activityMakeEl('li',{css:'margin-bottom:8px;'});
+      li.appendChild(activityMakeEl('strong',{text:activityText(s.name)||'—'}));
+      const dosage=activityText(s.dosage);
+      if(dosage)li.appendChild(document.createTextNode(` (${dosage})`));
+      // taken: 1 — принято, 0 — явный пропуск, null/отсутствует — данных нет
+      // (не считается автоматически «не принято»); без медицинских оценок.
+      const taken=s.taken;
+      const takenLabel=taken===1?{text:'Taken',color:'var(--good)'}
+        :taken===0?{text:'Skipped',color:'var(--slate)'}
+        :{text:'No data',color:'var(--muted)'};
+      li.appendChild(document.createTextNode(' '));
+      li.appendChild(activityMakeEl('span',{css:`font-size:var(--fs-sm2);color:${takenLabel.color};margin-left:4px;`,text:takenLabel.text}));
+      const time=activityText(s.time);
+      if(time){
+        li.appendChild(document.createTextNode(' '));
+        li.appendChild(activityMakeEl('span',{css:'font-size:var(--fs-sm2);color:var(--slate);margin-left:8px;',text:`at ${time}`}));
+      }
+      return li;
+    }
+  });
+}
+
+function renderCardioExercises(){
+  const container=$('#cardio_exercises_container');
+  if(!container)return;
+  activityRenderGroups(container,DATA.cardio_exercises,{
+    emptyMessage:'No cardio entries yet.',
+    icon:'cardio',
+    summarize:(date,items)=>{
+      const totalDuration=Math.round(items.reduce((acc,x)=>acc+(activityFiniteNumber(x.duration)||0),0));
+      return {leftText:`${md(date)} — ${items.length} cardio ${items.length===1?'session':'sessions'}`,rightText:`${totalDuration} min total`,rightColor:'var(--accent-2)'};
+    },
+    renderItem:c=>{
+      const li=activityMakeEl('li',{css:'margin-bottom:12px;'});
+      li.appendChild(activityMakeEl('strong',{text:activityText(c.type)||'—'}));
+      const duration=activityFiniteNumber(c.duration);
+      let line=`: ${duration!=null?duration:'—'} min`;
+      const distance=activityFiniteNumber(c.distance);
+      if(distance)line+=`, ${distance} km`;
+      const avgHr=activityFiniteNumber(c.avg_hr);
+      if(avgHr)line+=`, HR ${avgHr} bpm`;
+      const calories=activityFiniteNumber(c.calories);
+      if(calories)line+=`, ${calories} kcal`;
+      li.appendChild(document.createTextNode(line));
+      const time=activityText(c.time);
+      if(time){
+        li.appendChild(document.createTextNode(' '));
+        li.appendChild(activityMakeEl('span',{css:'font-size:var(--fs-sm2);color:var(--slate);margin-left:8px;',text:`at ${time}`}));
+      }
+      const zoneParts=[];
+      [5,4,3,2,1,0].forEach(n=>{
+        const val=activityText(c[`hr_zone_${n}_duration`]);
+        if(val&&val!=='0:00')zoneParts.push(`Z${n}: ${val}`);
+      });
+      if(zoneParts.length){
+        li.appendChild(document.createElement('br'));
+        li.appendChild(activityMakeEl('span',{css:'font-size:var(--fs-sm2);color:var(--slate);padding-left:10px;',text:`Heart-rate zones: ${zoneParts.join(', ')}`}));
+      }
+      return li;
+    }
+  });
+}
+</script>
+<script>
+/*__DESIGN_JS__*/
+</script>
+</body>
+</html>

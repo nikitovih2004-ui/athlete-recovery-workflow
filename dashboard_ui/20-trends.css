@@ -1,0 +1,374 @@
+/* Dynamics screen — matte health-intelligence hierarchy on top of the shared card family. */
+#panel-analytics {
+  --trend-recovery: var(--good);
+  --trend-load: var(--accent);
+  --trend-sleep: var(--accent-2);
+}
+
+#panel-analytics .panel-intro {
+  margin-bottom: 24px;
+}
+
+.trends-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--element-gap);
+  margin: 0 0 var(--element-gap);
+}
+
+.trend-summary-card {
+  position: relative;
+  min-width: 0;
+  min-height: 142px;
+  padding: 18px 20px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card-compact);
+  background: var(--surface);
+  box-shadow: var(--glass-shadow);
+}
+
+.trend-summary-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 6%, rgba(255,255,255,.055) 50%, transparent 94%);
+}
+
+.trend-summary-label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.trend-summary-label::before {
+  content: "";
+  width: 2px;
+  height: 12px;
+  flex: 0 0 auto;
+  border-radius: 99px;
+  background: var(--summary-accent, var(--slate));
+}
+
+.trend-summary-value {
+  margin-top: 20px;
+  color: var(--ink);
+  font-family: var(--font-data);
+  font-size: clamp(32px, 3vw, 42px);
+  font-weight: 350;
+  line-height: .96;
+  letter-spacing: -.035em;
+  font-variant-numeric: tabular-nums;
+}
+
+.trend-summary-value small {
+  margin-left: 4px;
+  color: var(--slate);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.trend-summary-note {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.trend-summary-card[data-tone="recovery"] { --summary-accent: var(--trend-recovery); }
+.trend-summary-card[data-tone="load"] { --summary-accent: var(--trend-load); }
+.trend-summary-card[data-tone="sleep"] { --summary-accent: var(--trend-sleep); }
+
+#panel-analytics .trend-card {
+  margin-top: 0;
+  padding: 24px;
+}
+
+#panel-analytics .trend-card + .trend-card,
+#panel-analytics .trends-grid + .trend-card,
+#panel-analytics .trend-card + .trends-grid,
+#panel-analytics .trends-grid + .trends-grid {
+  margin-top: var(--element-gap);
+}
+
+#panel-analytics .trends-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--element-gap);
+  margin-top: var(--element-gap);
+}
+
+#panel-analytics .trends-grid > .card {
+  grid-column: span 6;
+  margin-top: 0;
+}
+
+/* Post-merge: Volume (weekly+by-sport) and Connections (sleep chart+other-r
+   row) carry comparable content weight, so the row splits evenly 6/6. */
+#panel-analytics .trends-primary-row > .card { grid-column: span 6; }
+
+#panel-analytics .card-head {
+  margin-bottom: 8px;
+}
+
+#panel-analytics .card h2 {
+  max-width: 34ch;
+  font-size: 17px;
+  line-height: 1.22;
+}
+
+#panel-analytics .trend-card-kicker {
+  margin: 0 0 7px;
+  color: var(--slate);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+#panel-analytics .desc {
+  max-width: 72ch;
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+#panel-analytics .chart-summary {
+  min-height: 18px;
+  margin: 0 0 16px;
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+#panel-analytics .chart-summary strong {
+  color: var(--ink);
+  font-weight: 550;
+}
+
+#panel-analytics .trend-chart-viewport,
+#panel-analytics .small-mult {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 12px;
+  border: 0;
+  border-radius: 14px;
+  background: rgba(5,8,7,.34);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.035), inset 0 -1px 0 rgba(0,0,0,.3);
+  overscroll-behavior-inline: contain;
+  scrollbar-color: var(--border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+#panel-analytics .trend-chart-viewport:focus-visible,
+#panel-analytics .small-mult:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+#panel-analytics .trend-chart-viewport.has-horizontal-overflow::before {
+  content: "Scroll the chart horizontally";
+  display: block;
+  margin: 0 0 7px;
+  color: var(--slate);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+#panel-analytics .trend-chart-viewport > svg {
+  display: block;
+  width: max(100%, var(--chart-min-width, 560px));
+  height: auto;
+  max-width: none;
+}
+
+#c_recovery { --chart-min-width: 620px; }
+#c_weekly, #c_load { --chart-min-width: 560px; }
+#c_sleep { --chart-min-width: 500px; }
+
+/* "Другие связи" — compact row for weaker correlations below the primary chart */
+#panel-analytics .trend-connections-other {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle, var(--border));
+}
+#panel-analytics .trend-connections-label {
+  margin: 0 0 10px;
+  color: var(--slate);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+#panel-analytics .trend-connections-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 88px auto;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(5,8,7,.28);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+#panel-analytics .trend-connections-row:hover,
+#panel-analytics .trend-connections-row:focus-visible {
+  border-color: var(--border-strong);
+  outline: none;
+}
+#panel-analytics .trend-connections-row:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+/* physical press — та же тактильность, что у карточек State */
+#panel-analytics .trend-connections-row:active {
+  transform: translateY(1px) scale(.995);
+}
+#panel-analytics .trend-connections-title {
+  min-width: 0;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+#panel-analytics .trend-connections-bar {
+  display: block;
+  height: 4px;
+  border-radius: 99px;
+  background: var(--border-strong);
+  overflow: hidden;
+}
+#panel-analytics .trend-connections-bar i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width .3s ease;
+}
+#panel-analytics .trend-connections-r {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+#panel-analytics .small-mult {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(280px, 1fr));
+  gap: 10px;
+}
+
+#panel-analytics .small-mult > div {
+  min-width: 0;
+  padding: 4px;
+  border-right: 1px solid var(--border-subtle);
+}
+
+#panel-analytics .small-mult > div:last-child { border-right: 0; }
+#panel-analytics .small-mult svg { display: block; width: 100%; height: auto; max-width: none; }
+
+#panel-analytics .grid-line { opacity: .7; }
+#panel-analytics .baseline { opacity: .85; }
+#panel-analytics .hoverable { cursor: crosshair; }
+
+#panel-analytics .legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+#panel-analytics .legend .it {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+#panel-analytics .legend .sw {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+#panel-analytics .seg {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+#panel-analytics .seg button {
+  min-width: 72px;
+  min-height: 44px;
+  touch-action: manipulation;
+}
+
+#panel-analytics .trend-empty {
+  display: grid;
+  min-height: 220px;
+  place-items: center;
+  padding: 24px;
+  color: var(--muted);
+  text-align: center;
+}
+
+#panel-analytics .trend-empty strong {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 550;
+}
+
+@media (max-width: 980px) {
+  .trends-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 720px) {
+  .trends-summary { grid-template-columns: minmax(0, 1fr); }
+  .trend-summary-card { min-height: 124px; }
+  .trend-summary-value { margin-top: 16px; }
+  #panel-analytics .trend-card { padding: 18px; }
+  #panel-analytics .trends-grid { grid-template-columns: minmax(0, 1fr); }
+  #panel-analytics .trends-grid > .card { grid-column: 1; }
+  #panel-analytics .card-head { align-items: stretch; }
+  /* grid-auto-flow must be reset to row here — the base .card-head .seg rule
+     sets column-flow, which would keep spilling extra buttons into new implicit
+     columns no matter what grid-template-columns says below. */
+  #panel-analytics .card-head .seg { display: grid; width: 100%; min-width: 0; grid-auto-flow: row; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); }
+  #panel-analytics .seg button { width: 100%; min-width: 0; padding-inline: 5px; }
+  #panel-analytics .trend-chart-viewport,
+  #panel-analytics .small-mult { padding: 10px; }
+  #panel-analytics .trend-connections-row { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  #panel-analytics .trend-connections-r { justify-self: start; }
+}
+
+@media (max-width: 390px) {
+  #panel-analytics .card-head .seg { grid-auto-flow: row; grid-template-columns: minmax(0, 1fr); }
+  #panel-analytics .seg button { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #panel-analytics *, #panel-analytics *::before, #panel-analytics *::after {
+    scroll-behavior: auto !important;
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+@media (forced-colors: active) {
+  .trend-summary-card,
+  #panel-analytics .trend-chart-viewport,
+  #panel-analytics .small-mult { border: 1px solid CanvasText; }
+}

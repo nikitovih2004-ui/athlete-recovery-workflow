@@ -1,0 +1,160 @@
+/* ================== LIQUID GLASS V3 — тяжёлое стекло ==================
+   Изначально сюда входила и краевая рефракция (feDisplacementMap-карта под
+   backdrop-filter: url(), техника rdev/liquid-glass-react) — но контрольный
+   тест на контрастном фоне (см. дискуссию 17.07) показал: эффект технически
+   работает, но на спокойном фоне дашборда (туманность без резких границ)
+   физически нечего гнуть, так что визуальной отдачи ноль при реальной
+   нагрузке (canvas на карточку + ResizeObserver). Убрано. Осталась только
+   статическая оптика liquid-glass-studio, которая реально видна: Fresnel-
+   ободок (верх ярче, низ темнее), толщина стекла (тёмное скопление у нижней
+   внутренней кромки), двухслойная тень (контактная + объёмная), specular. */
+
+:root {
+  --lg-blur: 3px;
+  --lg-sat: 1.22;
+  --lg-shadow:
+    inset 0 1px 0 rgba(255,255,255,.13),
+    inset 1px 0 0 rgba(255,255,255,.045),
+    inset -1px 0 0 rgba(255,255,255,.045),
+    inset 0 -1px 0 rgba(0,0,0,.42),
+    inset 0 -22px 34px -22px rgba(0,0,0,.58),
+    inset 0 16px 26px -20px rgba(255,255,255,.065),
+    0 1px 2px rgba(0,0,0,.5),
+    0 10px 24px -12px rgba(0,0,0,.55),
+    0 40px 90px -34px rgba(0,0,0,.94);
+}
+
+/* Единый материал всех стеклянных поверхностей. Фоновые градиенты карточек
+   остаются из 90-polish; здесь — только масса: ободок, толщина, тень. */
+#panel-analytics .card,
+#panel-insights .card,
+#panel-workouts .card,
+.trend-summary-card,
+.product-stat,
+.state-card,
+.state-hero-card {
+  box-shadow: var(--lg-shadow);
+  -webkit-backdrop-filter: blur(var(--lg-blur)) saturate(var(--lg-sat));
+  backdrop-filter: blur(var(--lg-blur)) saturate(var(--lg-sat));
+}
+
+/* Navbar V4 (17.07): плоская непрозрачная полоса на всю ширину заменена
+   плавающей стеклянной таблеткой — тот же материал, что у карточек, чтобы
+   шейдер-фон был виден по бокам и сверху. .shell уже даёт 24px отступ по
+   бокам, так что скруглённые углы читаются без доп. margin по горизонтали. */
+.navbar,
+.state-active .navbar {
+  top: 14px;
+  margin: 14px 0 0;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 22px;
+  /* Навигация остаётся читаемой, но не перекрывает звёздный шейдер тяжёлой
+     чёрной полосой: активный state-режим переопределён тем же селектором. */
+  background:
+    radial-gradient(115% 72% at 12% -8%, rgba(255,255,255,.10), rgba(255,255,255,.025) 30%, transparent 52%),
+    radial-gradient(78% 58% at 94% 4%, rgb(78 164 150 / .035), transparent 70%),
+    linear-gradient(143deg, rgba(30,34,30,.15), rgba(20,24,21,.10) 46%, rgba(9,12,10,.18));
+  box-shadow:
+    inset 0 1px rgba(255,255,255,.10),
+    inset 0 -1px rgba(0,0,0,.20),
+    0 16px 34px -24px rgba(0,0,0,.78);
+  -webkit-backdrop-filter: blur(28px) saturate(1.35);
+  backdrop-filter: blur(28px) saturate(1.35);
+  overflow: hidden;
+}
+.navbar::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 22px; right: 22px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.22) 24%, rgba(255,255,255,.07), transparent);
+  pointer-events: none;
+}
+.navbar .tabs { background: rgba(5,8,8,.12); border-color: rgba(255,255,255,.055); }
+.navbar .tab.active {
+  background: rgba(255,255,255,.065);
+  box-shadow: inset 0 1px rgba(255,255,255,.08), inset 0 0 0 1px rgba(255,255,255,.035), 0 10px 22px -18px rgba(0,0,0,.86);
+}
+@media (min-width: 881px) {
+  /* 00-foundation.css зануляет горизонтальный padding у .nav-inner (был
+     рассчитан на нескруглённый, плоский navbar) — из-за этого лого-иконка
+     упиралась прямо в скруглённый край новой стеклянной таблетки. */
+  .nav-inner { padding-inline: 26px; }
+}
+@media (max-width: 880px) {
+  /* Шаблонная media-query (dashboard_template.html) плющит navbar обратно в
+     0 радиуса на узких экранах — перебиваем тем же уровнем специфичности. */
+  .navbar { top: 8px; margin: 8px 0 0; border-radius: 18px; }
+}
+
+.sheet {
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.12),
+    inset 0 -24px 40px -26px rgba(0,0,0,.6),
+    0 2px 6px rgba(0,0,0,.55),
+    0 48px 120px -28px rgba(0,0,0,.95);
+}
+
+/* Specular-полоса: широкий скошенный блик у верхней кромки вместо тонкого
+   волоска. Один градиент, без анимации — свет, а не свечение. */
+#panel-analytics .card::before,
+#panel-insights .card::before,
+#panel-workouts .card::before,
+.trend-summary-card::before {
+  height: 58px;
+  background:
+    linear-gradient(90deg, transparent, rgba(255,255,255,.20) 24%, rgba(255,255,255,.06), transparent),
+    linear-gradient(176deg, rgba(255,255,255,.05), rgba(255,255,255,0) 72%);
+  background-size: 100% 1px, 100% 100%;
+  background-repeat: no-repeat;
+}
+
+/* Атмосфера позади всего приложения: WebGL "mesh drift" шейдер (97-shader-bg.js)
+   рисует в этот хост. Плоская туманность-градиент (включая нелюбимое зелёное
+   пятно сверху слева) убрана 17.07 — шейдер теперь единственный живой слой. */
+.state-environment {
+  background: #050607;
+}
+.shader-bg-canvas {
+  /* «Свечение млечного пути»: шейдер-рецепт калиброван под демо на полную
+     яркость. .12 оказалось ниже порога заметности («вообще нету» — фидбек
+     17.07), 1.0 — кричащий баннер; .3 — дымка видна, текст карточек не
+     страдает. Обычный alpha-blend, НЕ screen: screen — режим высветления
+     и держит цвет ярким даже при низкой прозрачности. */
+  opacity: .3;
+}
+/* Звёзды — поверх свечения: canvas из 97-shader-bg.js (восстановленный
+   approved-слой 72e999b). Именно связка «звёзды + слабая дымка» читается
+   как космос, а не как цветной баннер. */
+.star-layer {
+  position: absolute;
+  inset: 0;
+}
+/* Лёгкая виньетка поверх: шейдер теперь тихий, поэтому и затемнение зоны
+   контента мягче — звёзды не должны тонуть. */
+.state-environment::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 85% at 50% 34%, rgba(5,6,7,.16), rgba(5,6,7,.38) 58%, rgba(5,6,7,.62) 100%);
+  pointer-events: none;
+}
+
+/* Деградация: у кого нет прозрачности — плотный непрозрачный материал c
+   теми же тенями. */
+@media (prefers-reduced-transparency: reduce) {
+  .navbar,
+  .state-active .navbar,
+  #panel-analytics .card,
+  #panel-insights .card,
+  #panel-workouts .card,
+  .trend-summary-card,
+  .product-stat,
+  .state-card,
+  .state-hero-card {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .navbar,
+  .state-active .navbar { background: rgba(5, 6, 8, .98); }
+}

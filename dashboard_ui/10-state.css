@@ -1,0 +1,272 @@
+:root {
+  --state-card-top: #202422;
+  --state-card-mid: #181c1a;
+  --state-card-bottom: #111513;
+  --state-aqua: 89 205 188;
+  --state-lime: 213 243 101;
+  --state-orange: 225 139 92;
+  --state-line: rgba(227,235,229,.08);
+}
+
+body.state-active {
+  background: #050607;
+}
+
+/* Living star field — the canvas owns the environment; атмосферная туманность
+   для рефракции задаётся в 95-glass.css. */
+.state-environment {
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  background: #050607;
+  transition: opacity 240ms ease;
+}
+.state-active .state-environment { opacity: 1; }
+/* Без opacity здесь: прозрачность шейдер-слоя задаёт .shader-bg-canvas в
+   95-glass.css — правило с opacity:1 молча перебивало её по специфичности. */
+.state-environment canvas { position:absolute; inset:0; width:100%; height:100%; }
+
+.state-active .navbar,
+.state-active .wrap,
+.state-active footer { position: relative; z-index: 1; }
+.state-active .navbar { background: rgba(5,7,6,.84); }
+
+#panel-overview.state-screen { min-width: 0; }
+.state-product { width: 100%; padding: 30px 0 8px; }
+
+/* Заголовок дня над сеткой */
+.state-head { margin: 0 2px 22px; }
+.state-date { margin:0 0 10px; color:#8c948e; font-size:11px; font-variant-numeric:tabular-nums; }
+.state-title { max-width:34ch; margin:0; color:#edf1ed; font-size:clamp(24px,2.2vw,31px); font-weight:340; line-height:1.08; letter-spacing:-.032em; }
+
+/* Структура V5 «плотная панель»: верхний ряд — кольцо · столбец из двух
+   компактных метрик (HRV/RHR) · сон-компакт; ниже — недельный график во
+   всю ширину. Ни одной карточки с пустой серединой. */
+.state-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0,1.02fr) minmax(0,1.14fr) minmax(0,1fr);
+  align-items: stretch;
+  gap: 14px;
+}
+.state-compact-stack {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 14px;
+  min-width: 0;
+}
+.state-week-section { margin-top: 14px; }
+
+/* ---------- Кольцо-датчик (hero) ---------- */
+.state-hero-card {
+  --fig-accent: #d5f365;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  min-height: 384px;
+  padding: 26px 24px 22px;
+  overflow: hidden;
+  appearance: none;
+  border: 1px solid rgba(255,255,255,.05);
+  border-radius: 22px;
+  color: inherit;
+  text-align: center;
+  isolation: isolate;
+  background:
+    radial-gradient(58% 84% at 26% 10%, rgba(255,255,255,.05), transparent 58%),
+    linear-gradient(155deg, rgba(24,29,27,.34), rgba(9,13,14,.46));
+  -webkit-backdrop-filter: blur(1.5px) saturate(1.1);
+  backdrop-filter: blur(1.5px) saturate(1.1);
+  box-shadow: inset 0 1px rgba(255,255,255,.06), inset 0 -2px rgba(0,0,0,.34), 0 7px 12px rgba(0,0,0,.4), 0 34px 72px -42px rgba(0,0,0,.98);
+}
+button.state-hero-card { cursor:pointer; transition: transform 170ms cubic-bezier(.16,1,.3,1), box-shadow 170ms cubic-bezier(.16,1,.3,1); }
+
+.state-ring-wrap { position:relative; z-index:1; display:grid; place-items:center; width:min(238px,100%); margin-top:4px; }
+.state-ring-wrap svg { grid-area:1/1; width:100%; height:auto; display:block; overflow:visible; }
+.ring-track { fill:none; stroke:rgba(233,242,235,.055); }
+.ring-edge { fill:none; stroke:rgba(233,242,235,.075); stroke-width:1; }
+.ring-fill {
+  fill:none;
+  stroke:url(#stateRingFill);
+  stroke-linecap:round;
+  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--fig-accent) 34%, transparent));
+  animation: state-ring-reveal 900ms cubic-bezier(.22,.9,.32,1) 1;
+}
+@keyframes state-ring-reveal {
+  from { stroke-dasharray: 0 1200; }
+}
+.ring-marker-ring { fill:var(--state-card-bottom); stroke:var(--fig-accent); stroke-width:1.4; }
+.ring-marker-core { fill:var(--fig-accent); }
+
+.state-ring-center { grid-area:1/1; display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:none; }
+.state-ring-value { color:#edf1ed; font-size:clamp(44px,4.4vw,58px); font-weight:250; line-height:.9; letter-spacing:-.065em; font-variant-numeric:tabular-nums; }
+.state-ring-unit { margin-top:2px; color:#a0a8a2; font-size:13px; }
+.state-ring-metric { margin-top:7px; color:#d8ded9; font-size:11.5px; }
+
+.state-ring-reading { position:relative; z-index:1; display:flex; flex-direction:column; align-items:center; margin-top:16px; }
+.state-ring-status { display:inline-flex; align-items:center; gap:7px; color:#b9c1ba; font-size:11.5px; }
+.state-ring-status::before { content:""; width:5px; height:5px; border-radius:50%; background:var(--fig-accent); }
+.state-ring-delta { margin-top:9px; padding:2px 9px; border-radius:7px; color:var(--fig-accent); background:color-mix(in srgb,var(--fig-accent) 12%,transparent); border:1px solid color-mix(in srgb,var(--fig-accent) 24%,transparent); font-size:10.5px; font-weight:550; line-height:15px; }
+.state-ring-delta.is-missing { color:#9ea69f; background:rgba(255,255,255,.04); border-color:rgba(255,255,255,.08); }
+.state-hero-card.is-missing .state-ring-value { color:#b0b7b1; }
+
+.state-recommendation { position:relative; z-index:1; display:flex; align-items:baseline; justify-content:center; gap:10px; width:calc(100% + 48px); margin:auto -24px -22px; padding:13px 20px 15px; border-top:1px solid rgba(255,255,255,.07); background:linear-gradient(180deg,rgba(255,255,255,.028),rgba(84,144,132,.05)); }
+.state-recommendation span { color:#79817b; font-size:10px; }
+.state-recommendation strong { color:#dce2dd; font-size:12px; font-weight:540; }
+
+/* ---------- Базовая state-карточка ---------- */
+.state-card {
+  --card-accent:#d5f365;
+  --card-accent-rgb:213 243 101;
+  position:relative;
+  display:flex;
+  min-width:0;
+  min-height:208px;
+  flex-direction:column;
+  overflow:hidden;
+  appearance:none;
+  padding:18px 20px;
+  border:1px solid rgba(255,255,255,.038);
+  border-radius:18px;
+  color:#e7ebe7;
+  text-align:left;
+  cursor:pointer;
+  isolation:isolate;
+  touch-action:manipulation;
+  background:
+    radial-gradient(115% 72% at 12% -8%,rgba(255,255,255,.11),rgba(255,255,255,.04) 30%,transparent 52%),
+    radial-gradient(78% 58% at 94% 4%,rgb(78 164 150 / .045),transparent 70%),
+    linear-gradient(143deg,rgba(30,34,30,.30),rgba(20,24,21,.24) 46%,rgba(9,12,10,.38));
+  -webkit-backdrop-filter: blur(1.5px) saturate(1.18) brightness(1.08);
+  backdrop-filter: blur(1.5px) saturate(1.18) brightness(1.08);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.07), inset 0 -2px 0 rgba(0,0,0,.56), 0 5px 8px rgba(0,0,0,.62), 0 30px 58px -25px rgba(0,0,0,.98);
+  transition: transform 170ms cubic-bezier(.16,1,.3,1), box-shadow 170ms cubic-bezier(.16,1,.3,1), filter 170ms ease;
+}
+.state-card::before { content:""; position:absolute; z-index:4; top:0; left:19px; width:61%; height:1px; background:linear-gradient(90deg,transparent,rgba(255,255,255,.24) 24%,rgba(255,255,255,.075),transparent); pointer-events:none; }
+.state-card::after { content:""; position:absolute; z-index:4; right:15px; bottom:0; left:15px; height:3px; border-radius:0 0 12px 12px; background:linear-gradient(180deg,transparent,rgba(0,0,0,.46)); pointer-events:none; }
+.state-card[data-accent="aqua"] { --card-accent:#59cdbc; --card-accent-rgb:89 205 188; }
+.state-card[data-accent="orange"] { --card-accent:#e18b5c; --card-accent-rgb:225 139 92; }
+.state-card[data-accent="neutral"] { --card-accent:#a1aaa3; --card-accent-rgb:161 170 163; }
+.state-card-sheen { position:absolute; z-index:1; inset:1px; border-radius:17px; background:linear-gradient(112deg,rgba(255,255,255,.036),transparent 24% 72%,rgb(78 164 150 / .022)); box-shadow:inset 1px 0 rgba(255,255,255,.018),inset -1px 0 rgba(0,0,0,.17); pointer-events:none; }
+.state-card-head { position:relative; z-index:2; display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+.state-card-label { display:inline-flex; align-items:center; gap:8px; min-width:0; color:#d0d6d1; font-size:11.5px; font-weight:520; line-height:16px; }
+.state-card-label::before { content:""; width:2px; height:11px; flex:0 0 auto; border-radius:2px; background:var(--card-accent); box-shadow:0 0 10px rgb(var(--card-accent-rgb) / .16); }
+.state-card-direction { display:inline-flex; align-items:center; height:16px; color:#7e8580; }
+.state-card-direction svg { display:block; }
+.state-card-reading { position:relative; z-index:2; display:flex; align-items:baseline; flex-wrap:wrap; gap:4px; margin-top:20px; }
+.state-card-value { color:#e9ede9; font-size:40px; font-weight:280; line-height:.96; letter-spacing:-.052em; font-variant-numeric:tabular-nums; }
+.state-card-unit { color:#98a09a; font-size:12px; font-weight:430; }
+.state-card-perf { margin-left:7px; color:#8f978f; font-size:17px; font-weight:320; letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
+.state-card-delta { position:relative; z-index:2; align-self:flex-start; margin-top:9px; padding:2px 8px; border-radius:7px; color:var(--card-accent); background:rgb(var(--card-accent-rgb) / .10); border:1px solid rgb(var(--card-accent-rgb) / .20); font-size:10.5px; font-weight:550; line-height:15px; }
+.state-card.is-missing .state-card-delta { background:rgba(255,255,255,.04); border-color:rgba(255,255,255,.08); }
+.state-card-context { position:relative; z-index:2; max-width:26ch; margin:11px 0 0; color:#969e98; font-size:11.5px; line-height:1.42; }
+.state-mini-plot { position:relative; z-index:2; width:100%; margin-top:auto; }
+.state-mini-plot svg { display:block; width:100%; height:auto; overflow:visible; }
+.state-chart-band { fill:rgb(var(--card-accent-rgb) / .078); }
+.state-chart-base { stroke:rgba(219,227,221,.48); stroke-width:1; vector-effect:non-scaling-stroke; }
+.state-chart-line { fill:none; stroke:var(--card-accent); stroke-width:1.25; opacity:.76; vector-effect:non-scaling-stroke; }
+.state-chart-dot { fill:#dce2dd; opacity:.88; }
+.state-chart-ring { fill:var(--state-card-bottom); stroke:var(--card-accent); stroke-width:1.25; vector-effect:non-scaling-stroke; }
+.state-chart-current { fill:var(--card-accent); }
+.state-card.is-missing .state-card-value { color:#b0b7b1; font-size:31px; letter-spacing:-.03em; }
+.state-card.is-missing .state-card-delta { color:#9ea69f; }
+.state-card.is-missing .state-mini-plot { opacity:.42; }
+
+/* ---------- Внимание (условная полоса) ---------- */
+.state-attention-strip {
+  position:relative;
+  display:flex; align-items:baseline; flex-wrap:wrap; gap:8px 14px;
+  margin-top:14px; padding:14px 20px;
+  border:1px solid rgb(var(--card-accent-rgb) / .22);
+  border-radius:16px;
+  background:linear-gradient(120deg, rgb(var(--card-accent-rgb) / .07), transparent 55%);
+}
+.state-attention-strip strong { color:#e7ebe7; font-size:13px; font-weight:540; }
+.state-attention-strip p { flex-basis:100%; margin:0; color:#a9b1aa; font-size:11.5px; line-height:1.45; }
+.state-attention { --card-accent:#d5f365; --card-accent-rgb:213 243 101; }
+.state-attention.is-warning { --card-accent:#ffc24b; --card-accent-rgb:255 194 75; }
+.state-attention.is-critical { --card-accent:#ff6b6b; --card-accent-rgb:255 107 107; }
+
+/* ---------- Компактные метрики (HRV/RHR в среднем столбце) ---------- */
+.state-compact-card { min-height:0; padding:16px 18px; }
+.state-compact-row { position:relative; z-index:2; display:flex; align-items:center; gap:16px; margin-top:10px; }
+.state-compact-row .state-card-reading { flex:0 0 auto; margin-top:0; }
+.state-compact-row .state-mini-plot { flex:1; min-width:0; margin-top:0; }
+.state-compact-card .state-card-value { font-size:34px; }
+.state-compact-card .state-card-delta { margin-top:10px; }
+
+/* ---------- Сон-компакт: часы + список стадий с барами ---------- */
+.state-sleep-panel { min-height:0; }
+/* margin-top:auto прижимает список к низу — свободная высота распределяется
+   между числом и списком, а не копится пустотой под ним */
+.state-stage-list { position:relative; z-index:2; display:grid; gap:9px; margin-top:auto; padding-top:16px; }
+.state-stage-row { display:grid; grid-template-columns:1fr auto; row-gap:4px; align-items:baseline; }
+.state-stage-name { display:inline-flex; align-items:center; gap:7px; color:#c3cac4; font-size:11px; }
+.state-stage-name i { width:6px; height:6px; border-radius:50%; background:var(--stage-color); }
+.state-stage-time { color:#8f978f; font-size:10.5px; font-variant-numeric:tabular-nums; }
+.state-stage-track { grid-column:1 / -1; display:block; height:4px; border-radius:4px; overflow:hidden; background:rgba(255,255,255,.05); }
+.state-stage-track i { display:block; height:100%; border-radius:4px; background:var(--stage-color); }
+
+/* ---------- Недельный график (во всю ширину) ---------- */
+.state-week-panel { width:100%; min-height:0; }
+.state-week-plot { position:relative; z-index:2; display:block; width:100%; margin-top:16px; }
+.state-week-plot svg { display:block; width:100%; height:clamp(150px,22vw,220px); overflow:visible; }
+.week-bar { fill:color-mix(in srgb, #e18b5c 52%, transparent); }
+.week-bar.is-current { fill:#e18b5c; }
+.week-line { fill:none; stroke:#d5f365; stroke-width:1.5; opacity:.82; vector-effect:non-scaling-stroke; }
+.week-dot { fill:#dce2dd; opacity:.85; }
+.week-ring { fill:var(--state-card-bottom); stroke:#d5f365; stroke-width:1.4; }
+.week-current { fill:#d5f365; }
+.week-days { position:relative; z-index:2; display:flex; margin-top:7px; padding:0 8px; }
+.week-day { flex:1; min-width:0; font-style:normal; text-align:center; color:#79817b; font-size:11px; }
+.week-day.is-current { color:#c3cac4; }
+
+/* ---------- Интеракции ---------- */
+@media (hover:hover) and (pointer:fine) {
+  .state-card[data-metric]:hover { transform:translateY(-2px); filter:brightness(1.045); box-shadow:inset 0 1px rgba(255,255,255,.085),inset 0 -2px rgba(0,0,0,.56),0 7px 11px rgba(0,0,0,.64),0 32px 58px -24px rgba(0,0,0,1); }
+  button.state-hero-card:hover { transform:translateY(-2px); box-shadow:inset 0 1px rgba(255,255,255,.075),inset 0 -2px rgba(0,0,0,.34),0 8px 13px rgba(0,0,0,.46),0 36px 74px -40px rgba(0,0,0,1); }
+}
+.state-card[data-metric]:active { transform:translateY(1px) scale(.995); transition-duration:80ms; }
+button.state-hero-card:active { transform:translateY(1px) scale(.996); transition-duration:80ms; }
+.state-card:focus-visible,.state-hero-card:focus-visible { outline:2px solid #d8ed78; outline-offset:3px; }
+
+/* ---------- Отзывчивость ---------- */
+@media (max-width:1080px) {
+  .state-hero-grid { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+  .state-hero-card { grid-column:1 / -1; min-height:330px; }
+}
+@media (max-width:640px) {
+  .state-product { padding-top:24px; }
+  .state-hero-grid { grid-template-columns:1fr; gap:10px; }
+  .state-compact-stack { gap:10px; }
+  .state-week-section { margin-top:10px; }
+  .state-card { min-height:0; padding:16px 17px; border-radius:17px; }
+  .state-card-sheen { border-radius:16px; }
+  .state-hero-card { padding:22px 18px 18px; border-radius:18px; }
+  .state-recommendation { width:calc(100% + 36px); margin:auto -18px -18px; }
+  .state-ring-wrap { width:min(206px,100%); }
+  /* 14 подписей дней не влезают — прячем каждый второй (помечен в JS) */
+  .week-day.is-odd { visibility:hidden; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .state-environment,.state-card,button.state-hero-card { transition:none; }
+  .state-card[data-metric]:hover,.state-card[data-metric]:active,button.state-hero-card:hover,button.state-hero-card:active { transform:none; }
+  .ring-fill { animation:none; }
+}
+@media (prefers-reduced-transparency:reduce) {
+  .state-card,.state-hero-card { -webkit-backdrop-filter:none; backdrop-filter:none; background-color:#171b19; }
+}
+@media (prefers-contrast:more) {
+  .state-environment canvas { opacity:.16; }
+  .state-card,.state-hero-card { border-color:rgba(255,255,255,.16); }
+}
+@media (forced-colors:active) {
+  .state-environment { display:none; }
+  .state-card,.state-hero-card { border:1px solid CanvasText; }
+  .state-card:focus-visible,.state-hero-card:focus-visible { outline-color:Highlight; }
+  .ring-fill,.ring-marker-core,.week-bar,.week-line { forced-color-adjust:none; }
+}

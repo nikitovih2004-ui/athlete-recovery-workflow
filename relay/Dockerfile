@@ -1,0 +1,12 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+COPY app.py ./
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PORT=8080
+
+USER 65532:65532
+EXPOSE 8080
+CMD ["python", "app.py"]

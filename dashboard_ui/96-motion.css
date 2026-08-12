@@ -1,0 +1,77 @@
+/* ================== MOTION V3 — премиальный вход и отклик ==================
+   Возвращает каскад входа, отключённый Jarvis-блоком шаблона
+   (`.panel:not([hidden]) .card { animation:none }`), и распространяет его
+   на все четыре вкладки: продуктовые карточки, evidence-сетку Факторов,
+   stat-полосу и state-карточки. Пружина сдержанная — подтягивание, не прыжок. */
+
+@keyframes lg-rise {
+  from { opacity: 0; transform: translateY(14px) scale(.985); }
+  to { opacity: 1; transform: none; }
+}
+
+.panel:not([hidden]) .card,
+.panel:not([hidden]) .tiles,
+.panel:not([hidden]) .product-stat,
+.panel:not([hidden]) .factor-evidence-card,
+.panel:not([hidden]) .trend-summary-card,
+.panel:not([hidden]) .state-hero-card,
+.panel:not([hidden]) .state-card,
+.panel:not([hidden]) .state-attention-strip,
+.panel:not([hidden]) .state-head {
+  animation: lg-rise .46s cubic-bezier(.22,.9,.32,1) both;
+  transform-origin: 50% 88%;
+}
+
+/* Каскад: очередь по позиции в родителе, максимум ~0.3s суммарно. */
+.panel:not([hidden]) > *:nth-child(2) { animation-delay: .05s; }
+.panel:not([hidden]) > *:nth-child(3) { animation-delay: .1s; }
+.panel:not([hidden]) > *:nth-child(4) { animation-delay: .15s; }
+.panel:not([hidden]) .state-hero-grid > *:nth-child(2),
+.panel:not([hidden]) .bento > .card:nth-child(2),
+.panel:not([hidden]) .product-stat:nth-child(2),
+.panel:not([hidden]) .factor-evidence-card:nth-child(2) { animation-delay: .06s; }
+.panel:not([hidden]) .state-hero-grid > *:nth-child(3),
+.panel:not([hidden]) .bento > .card:nth-child(3),
+.panel:not([hidden]) .product-stat:nth-child(3),
+.panel:not([hidden]) .factor-evidence-card:nth-child(3) { animation-delay: .12s; }
+.panel:not([hidden]) .bento > .card:nth-child(n+4),
+.panel:not([hidden]) .product-stat:nth-child(4),
+.panel:not([hidden]) .factor-evidence-card:nth-child(n+4) { animation-delay: .18s; }
+.panel:not([hidden]) .state-week-section .state-week-panel { animation-delay: .18s; }
+
+/* Вложенные карточки не анимируются повторно внутри уже въехавшего родителя. */
+.panel:not([hidden]) .card .card { animation: none; }
+
+/* ---------- Отклик на нажатие: вся интерактивная поверхность ---------- */
+.rank-item[role="button"]:active,
+.factor-evidence-card.clickable:active,
+.seg button:active,
+.state-pulse-main:active,
+.state-pulse-secondary:active {
+  transform: translateY(1px) scale(.994);
+  transition-duration: 70ms;
+}
+.rank-item[role="button"],
+.factor-evidence-card.clickable,
+.seg button {
+  transition: transform 150ms cubic-bezier(.16,1,.3,1), background-color 150ms ease, border-color 150ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel:not([hidden]) .card,
+  .panel:not([hidden]) .tiles,
+  .panel:not([hidden]) .product-stat,
+  .panel:not([hidden]) .factor-evidence-card,
+  .panel:not([hidden]) .trend-summary-card,
+  .panel:not([hidden]) .state-hero-card,
+  .panel:not([hidden]) .state-card,
+  .panel:not([hidden]) .state-attention-strip,
+  .panel:not([hidden]) .state-head {
+    animation: none;
+  }
+  .rank-item[role="button"]:active,
+  .factor-evidence-card.clickable:active,
+  .seg button:active,
+  .state-pulse-main:active,
+  .state-pulse-secondary:active { transform: none; }
+}

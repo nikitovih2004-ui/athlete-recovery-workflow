@@ -1,0 +1,67 @@
+# Local environments and caches
+venv/
+.venv/
+env/
+Env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment configuration and credentials
+.env
+.env.*
+!.env.example
+tokens.json
+tokens.json.*
+tokens*.json
+oauth_*state.json
+credentials*.json
+service-account*.json
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+
+# Runtime state, personal data, and generated output
+data/
+backups/
+*.db
+*.sqlite
+*.sqlite3
+*.db-*
+*.log
+*.jsonl
+dashboard.html
+*.bak
+*.backup
+*.dump
+*.sql
+
+# Private or unreviewed media
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.mp4
+*.mov
+*.avi
+
+# Local editor and agent metadata
+.idea/
+.vscode/
+.codex/
+.agents/
+.mcp.json
+skills-lock.json
+*HANDOFF*.md
+.worktrees/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/

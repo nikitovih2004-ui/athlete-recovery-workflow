@@ -1,0 +1,107 @@
+.sr-only {
+  position: absolute !important;
+  width: 1px !important; height: 1px !important;
+  padding: 0 !important; margin: -1px !important;
+  overflow: hidden !important; clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important; border: 0 !important;
+}
+
+/* Phase 6 shared material: State stays the approved source, while the three
+   product screens receive its one precise outer contour rather than new skins. */
+#panel-analytics .card,
+#panel-insights .card,
+#panel-workouts .card,
+.trend-summary-card,
+.product-stat {
+  border-color: rgba(255,255,255,.045);
+  background:
+    radial-gradient(110% 72% at 12% -8%, rgba(255,255,255,.08), rgba(255,255,255,.025) 30%, transparent 54%),
+    radial-gradient(78% 58% at 94% 4%, rgb(78 164 150 / .035), transparent 70%),
+    linear-gradient(143deg, rgba(30,34,30,.34), rgba(20,24,21,.28) 46%, rgba(9,12,10,.42));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.07), inset 0 -2px 0 rgba(0,0,0,.5), 0 5px 8px rgba(0,0,0,.52), 0 30px 58px -28px rgba(0,0,0,.96);
+  -webkit-backdrop-filter: blur(1.5px) saturate(1.14);
+  backdrop-filter: blur(1.5px) saturate(1.14);
+}
+
+#panel-analytics .card::before,
+#panel-insights .card::before,
+#panel-workouts .card::before,
+.trend-summary-card::before,
+.product-stat::after {
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.19) 24%, rgba(255,255,255,.06), transparent);
+}
+
+.sheet {
+  border-color: rgba(255,255,255,.14);
+  background:
+    radial-gradient(90% 70% at 10% 0, rgba(255,255,255,.065), transparent 58%),
+    linear-gradient(145deg, rgba(24,28,25,.96), rgba(8,11,9,.98));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.10), 0 40px 100px -24px rgba(0,0,0,.92);
+  -webkit-backdrop-filter: blur(6px) saturate(1.08);
+  backdrop-filter: blur(6px) saturate(1.08);
+}
+.sheet-backdrop { background: rgba(3,5,4,.74); }
+.sheet-x { border: 1px solid rgba(255,255,255,.12); border-radius: 12px; color: var(--ink); background: rgba(255,255,255,.055); }
+.sheet-x:hover { background: rgba(255,255,255,.10); }
+
+.chart-empty {
+  min-height: 176px;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 8px;
+  padding: 24px;
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+  background: var(--surface-underlay);
+}
+.chart-empty strong { color: var(--ink); font-size: 14px; font-weight: 500; }
+.chart-empty span { max-width: 42ch; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.is-insufficient-card { cursor: default !important; }
+.is-insufficient-card .metric-mini { opacity: .45; }
+.is-insufficient-card .expand-hint { display: none; }
+
+table caption {
+  padding: 0 0 14px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: left;
+}
+
+@media (max-width: 640px) {
+  .chart-empty { min-height: 148px; padding: 20px; }
+  .chart { max-width: 100%; }
+  .card > .chart { overflow-x: auto; overscroll-behavior-inline: contain; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .state-environment { display: none; }
+  #panel-analytics .card,
+  #panel-insights .card,
+  #panel-workouts .card,
+  .trend-summary-card,
+  .product-stat,
+  .sheet { -webkit-backdrop-filter: none; backdrop-filter: none; background-color: #171b19; }
+}
+
+@media (forced-colors: active) {
+  .sheet,
+  .sheet-backdrop,
+  .activity-source-tag,
+  .factor-source-tag,
+  .activity-load-bars,
+  .activity-source-rows,
+  .factor-evidence-stats { border: 1px solid CanvasText; background: Canvas; color: CanvasText; }
+  .sheet-x { border-color: CanvasText; color: CanvasText; background: Canvas; }
+  .activity-details > summary:focus-visible { outline-color: Highlight !important; }
+}
+
+@media (max-width: 320px) {
+  :root { --card-padding: 16px; --element-gap: 10px; }
+  .wrap { padding-inline: 8px; }
+  .nav-inner { padding-inline: 8px; }
+  .tab { font-size: 10px; }
+}
+/* Detail sheets use the established Dynamics interaction: generous, invisible point targets. */
+.detail-chart-hit { cursor:crosshair; pointer-events:all; touch-action:manipulation; }
+.detail-chart-hit:focus-visible { outline:none; stroke:var(--accent); stroke-width:2px; }

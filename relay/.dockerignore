@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+tests/
+README.md
+.env
+.env.*
+tokens*.json
+*.db
+*.sqlite*
+*.log
+*.pem
+*.key
+*.p12
+*.pfx
+backups/
+private-media/
