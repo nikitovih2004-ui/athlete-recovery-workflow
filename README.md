@@ -7,8 +7,9 @@ Telegram bot.
 
 This repository is a sanitized public-export candidate. It contains source,
 tests, and public documentation only. It intentionally contains no user data,
-runtime database, generated dashboard, credentials, logs, backups, screenshots,
-videos, or private operational history.
+runtime database, generated dashboard, credentials, logs, backups, or private
+operational history. The README includes one user-authorized live dashboard
+screenshot below as a visual interface example.
 
 > Publication gate: credential rotation, WHOOP terms review, UI provenance
 > review, and a project-license decision are still required. Until a `LICENSE`
@@ -27,6 +28,14 @@ videos, or private operational history.
 
 The project is independently developed and is not affiliated with, endorsed by,
 or sponsored by WHOOP, Telegram, Google, or their respective affiliates.
+
+## Authorized live dashboard example
+
+This user-authorized live dashboard screenshot is included only to illustrate the
+interface and visible readiness panels. It is not a public deployment or a
+reproducible demo dataset.
+
+![User-authorized live dashboard example showing readiness, recovery, sleep, and activity panels.](docs/dashboard-live-example.png)
 
 ## Privacy-first starting point
 
