@@ -14,7 +14,8 @@ make the remaining trust boundaries visible.
   bearer tokens, SSH keys, passwords, cookies, and capability URLs;
 - IP addresses, hostnames, usernames tied to an operator, cloud project IDs,
   private paths, cron output, and incident timestamps;
-- screenshots, videos, design-reference exports, fonts, and other binaries;
+- screenshots, videos, design-reference exports, fonts, and other binaries,
+  except the single README-linked user-authorized dashboard screenshot;
 - private production runbooks, handoff notes, raw prompts, internal traces,
   agent workspace metadata, and local editor configuration;
 - old Git history and branches that contained any of the above.
@@ -37,3 +38,9 @@ reviewed endpoint. Never publish a generated dashboard from a real database.
 If a future contributor proposes adding an example asset, they must document
 its provenance, license, binary contents, metadata, and privacy review before it
 is considered for inclusion.
+
+The sole reviewed exception is `docs/dashboard-live-example.png`, the
+user-authorized live dashboard screenshot linked from the README. It visibly
+contains dashboard readiness, recovery, sleep, and activity metrics plus a date
+range, but no account identifier, URL, source path, credential, or authenticated
+control. All other personal data and media remain excluded.

@@ -18,6 +18,9 @@ FORBIDDEN_SUFFIXES = {
     ".dump", ".sql", ".pem", ".key", ".p12", ".pfx", ".jsonl",
     ".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".mov",
 }
+ALLOWED_PUBLIC_ASSET = "docs/dashboard-live-example.png"
+EXPECTED_PUBLIC_ASSET_SIZE = (1808, 861)
+EXPECTED_PUBLIC_ASSET_BYTES = 1_182_201
 SECRET_PATTERNS = {
     "private-key": re.compile("-----BEGIN " + "(?:RSA |OPENSSH |EC |DSA )?" + "PRIVATE" + " KEY-----"),
     "telegram-token": re.compile(r"\b\d{6,12}:[A-Za-z0-9_-]{24,}\b"),
@@ -25,6 +28,24 @@ SECRET_PATTERNS = {
     "github-token": re.compile(r"\b(?:ghp|github_pat)_[A-Za-z0-9_]{20,}\b"),
     "aws-access-key": re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
 }
+
+
+def validate_allowed_asset(path: pathlib.Path) -> list[str]:
+    findings: list[str] = []
+    try:
+        if path.stat().st_size != EXPECTED_PUBLIC_ASSET_BYTES:
+            findings.append(f"approved-asset-size:{path.relative_to(ROOT)}")
+        from PIL import Image
+        with Image.open(path) as image:
+            image.verify()
+        with Image.open(path) as image:
+            if image.format != "PNG":
+                findings.append(f"approved-asset-type:{path.relative_to(ROOT)}")
+            if image.size != EXPECTED_PUBLIC_ASSET_SIZE:
+                findings.append(f"approved-asset-dimensions:{path.relative_to(ROOT)}")
+    except Exception as exc:
+        findings.append(f"approved-asset-invalid:{path.relative_to(ROOT)}:{type(exc).__name__}")
+    return findings
 
 
 def tracked_files() -> list[pathlib.Path]:
@@ -44,10 +65,15 @@ def main() -> int:
             findings.append(f"forbidden-name:{relative}")
         if any(part.lower() in FORBIDDEN_PARTS for part in relative.parts):
             findings.append(f"forbidden-part:{relative}")
-        if relative.suffix.lower() in FORBIDDEN_SUFFIXES:
+        relative_name = relative.as_posix()
+        if relative_name == ALLOWED_PUBLIC_ASSET:
+            findings.extend(validate_allowed_asset(path))
+        elif relative.suffix.lower() in FORBIDDEN_SUFFIXES:
             findings.append(f"forbidden-suffix:{relative}")
         if relative.name.startswith(".env") and relative.name != ".env.example":
             findings.append(f"environment-file:{relative}")
+        if relative_name == ALLOWED_PUBLIC_ASSET:
+            continue
         try:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:

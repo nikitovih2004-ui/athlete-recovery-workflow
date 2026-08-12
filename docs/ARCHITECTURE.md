@@ -80,4 +80,8 @@ provider results before they can affect local state.
 
 The full data inventory and retention limitations are in [PRIVACY.md](../PRIVACY.md).
 The public repository contains no runtime database, generated dashboard,
-provider response, log, backup, screenshot, video, or credential.
+provider response, log, backup, video, or credential. The sole reviewed
+exception is the README-linked `docs/dashboard-live-example.png` screenshot;
+it visibly contains dashboard metrics and a date range, but no account
+identifier, URL, source path, credential, or authenticated control. All other
+personal data and media are excluded.

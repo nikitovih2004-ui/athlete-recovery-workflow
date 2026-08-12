@@ -7,12 +7,16 @@ repository created from a reviewed sanitized commit, with no imported history.
 
 - [ ] Canonical source is the reviewed production-ready line; no private branch
       or merge history is imported.
-- [ ] `data/`, databases, logs, backups, generated dashboards, screenshots,
-      videos, design references, private handoffs, local metadata, and runtime
-      state are absent.
+- [ ] `data/`, databases, logs, backups, generated dashboards, videos, design
+      references, private handoffs, local metadata, and runtime state are
+      absent. The only approved image exception is the reviewed
+      `docs/dashboard-live-example.png` README screenshot.
 - [ ] `.env.example` contains only blank secrets/identifiers and safe defaults.
-- [ ] No token, key, certificate, capability URL, host, IP, private date, health
-      value, lifestyle note, chat export, or provider response is present.
+- [ ] No token, key, certificate, capability URL, host, IP, health value,
+      lifestyle note, chat export, or provider response is present outside the
+      explicitly user-authorized screenshot. That screenshot has visible
+      dashboard metrics and a date range, but no account identifier, URL, source
+      path, credential, or authenticated control.
 - [ ] No forbidden provider/tool references or agent workspace metadata remain.
 - [ ] README links resolve to files in the export.
 

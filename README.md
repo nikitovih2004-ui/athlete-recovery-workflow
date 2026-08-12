@@ -6,10 +6,13 @@ private readiness dashboard; and can deliver summaries through an authorized
 Telegram bot.
 
 This repository is a sanitized public-export candidate. It contains source,
-tests, and public documentation only. It intentionally contains no user data,
-runtime database, generated dashboard, credentials, logs, backups, or private
-operational history. The README includes one user-authorized live dashboard
-screenshot below as a visual interface example.
+tests, and public documentation only. It intentionally contains no runtime
+database, generated dashboard, credentials, logs, backups, or private operational
+history. The sole personal-data exception is the user-authorized live-dashboard
+screenshot below: it visibly contains dashboard readiness, recovery, sleep, and
+activity metrics plus a date range, but no account identifier, URL, source path,
+credential, or authenticated control. All other personal data and media are
+excluded.
 
 > Publication gate: credential rotation, WHOOP terms review, UI provenance
 > review, and a project-license decision are still required. Until a `LICENSE`
@@ -31,9 +34,11 @@ or sponsored by WHOOP, Telegram, Google, or their respective affiliates.
 
 ## Authorized live dashboard example
 
-This user-authorized live dashboard screenshot is included only to illustrate the
-interface and visible readiness panels. It is not a public deployment or a
-reproducible demo dataset.
+This user-authorized live dashboard screenshot visibly contains dashboard
+readiness, recovery, sleep, and activity metrics plus its date range. It has no
+account identifier, URL, source path, credential, or authenticated control. It
+is included only as an interface example; all other personal data and media
+remain excluded. It is not a public deployment or a reproducible demo dataset.
 
 ![User-authorized live dashboard example showing readiness, recovery, sleep, and activity panels.](docs/dashboard-live-example.png)
 
